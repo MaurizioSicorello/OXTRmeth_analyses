@@ -22,6 +22,6 @@ varRetained = pdm.dat.M_tilde*pdm.dat.Dt;
 sum(var(varRetained)/size(mm, 2))
 
 cd('..\Results')
-pdm2 = multivariateMediation(pdm, 'nPDM', 4, 'svd', 'bootPDM', 'Bsamp', 5, 'save2file', 'test.mat', 'returnbootsamples');
+pdm2 = multivariateMediation(pdm, 'nPDM', 4, 'svd', 'bootPDM', 'Bsamp', 10000, 'save2file', 'test.mat', 'returnbootsamples');
 
 
