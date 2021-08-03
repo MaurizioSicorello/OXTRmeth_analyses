@@ -1,6 +1,8 @@
-# analysen wiederholen für MT2. ggf. plots für genexpression. Leons Segmentmethode. change code to show RMSE plots
 
-# Benennung der CpGs mit Robert klären
+# TO DO: (1) repeat CTQ analyses with binary variable 'ctq_dich01_multi01', (2) repeat mediation analysis with Martin's settings, 
+# (3) robustness check of PLS loading plot, (4) repeat unsupervised analyses for childen, (5) quantify overlap between cluster solutions
+# (6) Antrag fertigstellen
+
 
 #################################
 # Load and prepare packages/data
@@ -18,7 +20,7 @@ df = read.csv(here("Data", "RUB_OXTR_Daten_26.4.csv"), header = T, sep = ";")
 # subset mother CpGs and convert to decimal
 df_CpG_m = df[,grepl("CpG_m", names(df))]
 df_CpG_m = as.data.frame(apply(df_CpG_m,2, function(x){as.numeric(sub("%", "", x, fixed=TRUE))/100}))
-df_outcomes = df[complete.cases(df_CpG_m), c("ctq_sum", "Genexp_OXTR_mother")]
+df_outcomes = df[complete.cases(df_CpG_m), c("ctq_sum", "Genexp_OXTR_mother", "ctq_dich01_multi01")]
 df_CpG_m = df_CpG_m[complete.cases(df_CpG_m),]
 
 # load identifier of gene sections
@@ -255,11 +257,13 @@ ggplot(data = dfplot_geneExpr_cors, aes(x = reorder(dfcodes.CpG, rep((1:nrow(dfp
 
 
 #################
-# childhood trauma
+# childhood trauma [continuous]
+
 
 # do nested k-fold PLS
 PLSnested_CTQ = PLSnestedCV(df_outcomes$ctq_sum, df_CpG_m, nrepeats = repeats, nfolds = folds, maxComps = maxcomp, setSeed = 1000)
 PLSnested_CTQ[[1]]
+
 
 # create permutation samples [takes ~2h on my machine]
 # plsPerm_all_CTQ <- permutePLSnestedCV(df_outcomes$ctq_sum, df_CpG_m, nrepeats = repeats, nfolds = folds, nperms = perms)
@@ -287,6 +291,7 @@ CTQ_finalModel = plsr(DV ~ .,
                            ncomp = 1)
 summary(CTQ_finalModel)
 
+
 # plot loadings
 pls_CTQ_loadings = CTQ_finalModel$loadings[,1:ncol(CTQ_finalModel$loadings)]
 dfplot_CTQ_loadings <- data.frame(dfcodes$CpG, pls_CTQ_loadings, dfcodes$segment2)
@@ -306,6 +311,72 @@ ggplot(data = dfplot_CTQ_cors, aes(x = reorder(dfcodes.CpG, rep((1:nrow(dfplot_C
   geom_path(group = 1, size = 0.8) +
   
   theme_classic() + ylim(-max(abs(pls_CTQ_loadings))*1.5, max(abs(pls_CTQ_loadings))*1.5) 
+
+
+
+#################
+# childhood trauma [categorical]
+
+# do nested k-fold PLS
+PLSnested_CTQcat = PLSnestedCV(df_outcomes$ctq_dich01_multi01, df_CpG_m, nrepeats = repeats, nfolds = folds, maxComps = maxcomp, setSeed = 1000, classification = T)
+PLSnested_CTQcat[[1]]
+
+
+outcome = df_outcomes$ctq_dich01_multi01
+predictors = df_CpG_m
+
+
+
+# create permutation samples [takes ~2h on my machine]
+# plsPerm_all_CTQcat <- permutePLSnestedCV(df_outcomes$ctq_sum, df_CpG_m, nrepeats = repeats, nfolds = folds, nperms = perms)
+# write.csv(plsPerm_all_CTQcat, here("Results", "plsPerm_all_CTQcat.csv"))
+
+# p-value
+df_CTQcat_perms <- read.csv(here("Results", "plsPerm_all_CTQcat.csv"))
+p_CTQcat <- sum(df_CTQcat_perms[,2] >= PLSnested_CTQcat[[1]])/length(df_CTQcat_perms[,2])
+p_CTQcat
+
+# plot ncomp solutions for individual folds
+df_CTQcat_optComp <- melt(PLSnested_CTQcat[[3]])
+df_CTQcat_optComp$ncomp <- rep(c(1:maxcomp), times = repeats*folds)
+df_CTQcat_optComp_min <- ddply(df_CTQcat_optComp, "variable", subset, value == min(value))
+ggplot(data = df_CTQcat_optComp, aes(y = value, x = ncomp, group = variable)) +
+  geom_line(colour = "darkgrey") + geom_point(size = 1, colour = "darkgrey") +
+  
+  geom_point(data = df_CTQcat_optComp_min, colour = "darkblue") + 
+  
+  theme_classic() + ylab("RMSE (cross-validated)") + xlab("number of components")
+
+# create final model with optimal number of components
+CTQcat_finalModel = plsr(DV ~ .,
+                      data = PLSnested_CTQcat$dat,
+                      ncomp = 1)
+summary(CTQcat_finalModel)
+
+
+# plot loadings
+pls_CTQcat_loadings = CTQcat_finalModel$loadings[,1:ncol(CTQcat_finalModel$loadings)]
+dfplot_CTQcat_loadings <- data.frame(dfcodes$CpG, pls_CTQcat_loadings, dfcodes$segment2)
+
+ggplot(data = dfplot_CTQcat_loadings, aes(x = reorder(dfcodes.CpG, rep((1:nrow(dfplot_CTQcat_loadings)), length.out = nrow(dfplot_CTQcat_loadings))), y = pls_CTQcat_loadings, colour = factor(dfcodes.segment2))) +
+  geom_hline(yintercept=0, colour = "darkgrey") +
+  geom_path(group = 1, size = 0.8) +
+  
+  theme_classic() + ylim(-max(abs(pls_CTQcat_loadings))*1.5, max(abs(pls_CTQcat_loadings))*1.5) 
+
+# plot bivariate correlations
+dfplot_CTQcat_cors <- dfplot_CTQcat_loadings
+dfplot_CTQcat_cors$pls_CTQcat_loadings  <- cor(PLSnested_CTQcat$dat)[1, -1]
+
+ggplot(data = dfplot_CTQcat_cors, aes(x = reorder(dfcodes.CpG, rep((1:nrow(dfplot_CTQcat_cors)), length.out = nrow(dfplot_CTQcat_cors))), y = pls_CTQcat_loadings, colour = factor(dfcodes.segment2))) +
+  geom_hline(yintercept=0, colour = "darkgrey") +
+  geom_path(group = 1, size = 0.8) +
+  
+  theme_classic() + ylim(-max(abs(pls_CTQcat_loadings))*1.5, max(abs(pls_CTQcat_loadings))*1.5) 
+
+
+
+
 
 
 #################
@@ -384,6 +455,15 @@ Medmodel=
 
 fit=sem(Medmodel,dfMediation)
 summary(fit)
+
+
+
+
+
+
+
+
+
 
 
 
