@@ -404,7 +404,8 @@ cor(dfMediation)
 
 # create df for multivariate mediation in matlab
 dfMediation_Mat <- data.frame(dfMediation[,1:3], PLSnested_Genexpr$dat[,-1])
-write.csv(dfMediation_Mat, file = "MediationData.csv", row.names = F)
+write.csv(dfMediation_Mat, file = "Data/MediationData.csv", row.names = F)
+
 
 
 
