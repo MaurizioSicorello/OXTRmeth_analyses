@@ -1,6 +1,6 @@
 
 # nested k-fold CV evaluation of PLS
-PLSnestedCV <- function(outcome, predictors, nrepeats, nfolds, maxComps = 30, setSeed = 1000){
+PLSnestedCV <- function(outcome, predictors, nrepeats, nfolds, maxComps = 30, setSeed = 1000, classification = F){
   
   fitControl <- trainControl(method = "repeatedcv",   
                              number = nfolds, 
@@ -11,6 +11,7 @@ PLSnestedCV <- function(outcome, predictors, nrepeats, nfolds, maxComps = 30, se
   df_pred = scale(df_pred)
   df_pred = as.data.frame(df_pred[!is.na(df_pred[,1]), ])
   names(df_pred)[1] = "DV"
+  if(classification == T){df_pred$DV = as.factor(df_pred$DV)}
   
   # prepare output df
   df_out <- as.data.frame(matrix(nrow = nrepeats*nfolds, ncol = 2))
@@ -34,37 +35,43 @@ PLSnestedCV <- function(outcome, predictors, nrepeats, nfolds, maxComps = 30, se
       f <- as.formula("DV ~ .")
       
       set.seed(setSeed+count)
+      
       plsOptComp <- train(f,
                           data = trainSet,
                           trControl = fitControl,
                           method = "pls",
-                          metric = "RMSE",
                           preProcess = c('scale', 'center'),
                           na.action = na.omit,
                           tuneGrid = plsGrid)
       
-      Rsquared <- 1 - sum((testSet[,1] - predict(plsOptComp, newdata = testSet))^2)/(var(testSet[,1])*(nrow(testSet)-1))
-      
-      df_out[count, 1] <- max(Rsquared, 0)
-      df_out[count, 2] <- plsOptComp$bestTune$ncomp
-      df_foldwise[, count] <- plsOptComp$results$RMSE
+      if(classification == F){
+        Accuracy <- 1 - sum((testSet[,1] - predict(plsOptComp, newdata = testSet))^2)/(var(testSet[,1])*(nrow(testSet)-1))
+        df_out[count, 1] <- max(Accuracy, 0)
+        df_out[count, 2] <- plsOptComp$bestTune$ncomp
+        df_foldwise[, count] <- plsOptComp$results$RMSE
+      }else{
+        Accuracy <- sum(ifelse(testSet[,1] == predict(plsOptComp, newdata = testSet), 1, 0))/nrow(testSet)
+        df_out[count, 1] <- Accuracy
+        df_out[count, 2] <- plsOptComp$bestTune$ncomp
+        df_foldwise[, count] <- plsOptComp$results$Accuracy
+      }
       
     }
   }
-  return(list(Rsquared = mean(df_out[,1]), outerFolds = df_out, innerFolds = df_foldwise, dat = df_pred))
+  return(list(Accuracy = mean(df_out[,1]), outerFolds = df_out, innerFolds = df_foldwise, dat = df_pred))
 }
 
 
 
 # permutation test of PLS
-permutePLSnestedCV <- function(outcome, predictors, nrepeats, nfolds, nperms, maxComps = 30, setSeed = 1000){
+permutePLSnestedCV <- function(outcome, predictors, nrepeats, nfolds, nperms, maxComps = 30, setSeed = 1000, classification = F){
   
   savePerm <- numeric(nperms)
   
   for(i in 1:nperms){
     
     outcomePerm <- sample(outcome)
-    savePerm[i] <- PLSnestedCV(outcomePerm, predictors, nrepeats, nfolds, maxComps, setSeed = round(runif(1, 1000, 4000)))[[1]]
+    savePerm[i] <- PLSnestedCV(outcomePerm, predictors, nrepeats, nfolds, maxComps, setSeed = round(runif(1, 1000, 4000)), classification = classification)[[1]]
     
   }
   
