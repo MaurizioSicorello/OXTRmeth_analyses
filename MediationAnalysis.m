@@ -16,7 +16,7 @@ for i=1:size(DF, 1)
 end
 
 % compute PDM for 
-pdm = multivariateMediation(xx,yy,mm_cell, 'B', 50, 'svd', 'plots');
+pdm = multivariateMediation(xx,yy,mm_cell, 'B', 20, 'svd', 'plots');
 
 varRetained = pdm.dat.M_tilde*pdm.dat.Dt;
 sum(var(varRetained)/size(mm, 2))
