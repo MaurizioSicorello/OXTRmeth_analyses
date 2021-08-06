@@ -326,7 +326,6 @@ outcome = df_outcomes$ctq_dich01_multi01
 predictors = df_CpG_m
 
 
-
 # create permutation samples [takes ~2h on my machine]
 # plsPerm_all_CTQcat <- permutePLSnestedCV(df_outcomes$ctq_sum, df_CpG_m, nrepeats = repeats, nfolds = folds, nperms = perms)
 # write.csv(plsPerm_all_CTQcat, here("Results", "plsPerm_all_CTQcat.csv"))
@@ -339,7 +338,7 @@ p_CTQcat
 # plot ncomp solutions for individual folds
 df_CTQcat_optComp <- melt(PLSnested_CTQcat[[3]])
 df_CTQcat_optComp$ncomp <- rep(c(1:maxcomp), times = repeats*folds)
-df_CTQcat_optComp_min <- ddply(df_CTQcat_optComp, "variable", subset, value == min(value))
+df_CTQcat_optComp_min <- ddply(df_CTQcat_optComp, "variable", subset, value == max(value))
 ggplot(data = df_CTQcat_optComp, aes(y = value, x = ncomp, group = variable)) +
   geom_line(colour = "darkgrey") + geom_point(size = 1, colour = "darkgrey") +
   
@@ -348,8 +347,8 @@ ggplot(data = df_CTQcat_optComp, aes(y = value, x = ncomp, group = variable)) +
   theme_classic() + ylab("RMSE (cross-validated)") + xlab("number of components")
 
 # create final model with optimal number of components
-CTQcat_finalModel = plsr(DV ~ .,
-                      data = PLSnested_CTQcat$dat,
+CTQcat_finalModel = plsda(x = PLSnested_CTQcat$dat[,-1], 
+                          y = PLSnested_CTQcat$dat[,1],
                       ncomp = 1)
 summary(CTQcat_finalModel)
 
@@ -363,19 +362,6 @@ ggplot(data = dfplot_CTQcat_loadings, aes(x = reorder(dfcodes.CpG, rep((1:nrow(d
   geom_path(group = 1, size = 0.8) +
   
   theme_classic() + ylim(-max(abs(pls_CTQcat_loadings))*1.5, max(abs(pls_CTQcat_loadings))*1.5) 
-
-# plot bivariate correlations
-dfplot_CTQcat_cors <- dfplot_CTQcat_loadings
-dfplot_CTQcat_cors$pls_CTQcat_loadings  <- cor(PLSnested_CTQcat$dat)[1, -1]
-
-ggplot(data = dfplot_CTQcat_cors, aes(x = reorder(dfcodes.CpG, rep((1:nrow(dfplot_CTQcat_cors)), length.out = nrow(dfplot_CTQcat_cors))), y = pls_CTQcat_loadings, colour = factor(dfcodes.segment2))) +
-  geom_hline(yintercept=0, colour = "darkgrey") +
-  geom_path(group = 1, size = 0.8) +
-  
-  theme_classic() + ylim(-max(abs(pls_CTQcat_loadings))*1.5, max(abs(pls_CTQcat_loadings))*1.5) 
-
-
-
 
 
 
@@ -412,53 +398,13 @@ cor(dfplot_CTQ_loadings[dfplot_CTQ_loadings$dfcodes.segment2 != "exon3_transl", 
 
 # create df for mediation via PLS components
 dfMediation <- data.frame(df_outcomes[!is.na(df_outcomes$Genexp_OXTR_mother), ], as.numeric(CTQ_finalModel$scores[!is.na(df_outcomes$Genexp_OXTR_mother)]), as.numeric(geneExpr_finalModel$scores))
-names(dfMediation)[3:4] <- c("CTQ_CpG_scores", "GeneExpr_CpG_scores") 
+names(dfMediation)[4:5] <- c("CTQ_CpG_scores", "GeneExpr_CpG_scores") 
 dfMediation <- as.data.frame(scale(dfMediation))
 cor(dfMediation)
 
 # create df for multivariate mediation in matlab
-dfMediation_Mat <- data.frame(dfMediation[,1:2], PLSnested_Genexpr$dat[,-1])
+dfMediation_Mat <- data.frame(dfMediation[,1:3], PLSnested_Genexpr$dat[,-1])
 write.csv(dfMediation_Mat, file = "MediationData.csv", row.names = F)
-
-
-library("lavaan")
-
-Medmodel=
-  "
-  #Regressions
-  CTQ_CpG_scores ~ a*ctq_sum
-  GeneExpr_CpG_scores ~ b*CTQ_CpG_scores + c*ctq_sum
-  Genexp_OXTR_mother ~ d*GeneExpr_CpG_scores + e*CTQ_CpG_scores + f*ctq_sum
-  
-  #Defined Parameters:
-  full_indirect := a*b*d
-  first_indirect := a*e
-  second_indirect := c*d
-  c_prime := f
-  c_fullEst := (a*b*d)+(a*e)+(c*d) + f
-"
-
-fit=sem(Medmodel,dfMediation)
-summary(fit)
-
-
-Medmodel=
-  "
-  #Regressions
-  GeneExpr_CpG_scores ~ a*ctq_sum
-  Genexp_OXTR_mother ~ b*GeneExpr_CpG_scores + c*ctq_sum
-  
-  #Defined Parameters:
-  ie := a*b
-  de := c
-"
-
-fit=sem(Medmodel,dfMediation)
-summary(fit)
-
-
-
-
 
 
 

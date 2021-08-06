@@ -46,13 +46,15 @@ PLSnestedCV <- function(outcome, predictors, nrepeats, nfolds, maxComps = 30, se
       
       if(classification == F){
         Accuracy <- 1 - sum((testSet[,1] - predict(plsOptComp, newdata = testSet))^2)/(var(testSet[,1])*(nrow(testSet)-1))
+        df_out[count, 1] <- max(Accuracy, 0)
+        df_out[count, 2] <- plsOptComp$bestTune$ncomp
+        df_foldwise[, count] <- plsOptComp$results$RMSE
       }else{
         Accuracy <- sum(ifelse(testSet[,1] == predict(plsOptComp, newdata = testSet), 1, 0))/nrow(testSet)
+        df_out[count, 1] <- Accuracy
+        df_out[count, 2] <- plsOptComp$bestTune$ncomp
+        df_foldwise[, count] <- plsOptComp$results$Accuracy
       }
-      
-      df_out[count, 1] <- max(Accuracy, 0)
-      df_out[count, 2] <- plsOptComp$bestTune$ncomp
-      df_foldwise[, count] <- plsOptComp$results$RMSE
       
     }
   }
