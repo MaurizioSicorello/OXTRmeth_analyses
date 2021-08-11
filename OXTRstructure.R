@@ -321,14 +321,12 @@ ggplot(data = dfplot_CTQ_cors, aes(x = reorder(dfcodes.CpG, rep((1:nrow(dfplot_C
 PLSnested_CTQcat = PLSnestedCV(df_outcomes$ctq_dich01_multi01, df_CpG_m, nrepeats = repeats, nfolds = folds, maxComps = maxcomp, setSeed = 1000, classification = T)
 PLSnested_CTQcat[[1]]
 
-
 outcome = df_outcomes$ctq_dich01_multi01
 predictors = df_CpG_m
 
-
 # create permutation samples [takes ~2h on my machine]
-# plsPerm_all_CTQcat <- permutePLSnestedCV(df_outcomes$ctq_sum, df_CpG_m, nrepeats = repeats, nfolds = folds, nperms = perms)
-# write.csv(plsPerm_all_CTQcat, here("Results", "plsPerm_all_CTQcat.csv"))
+plsPerm_all_CTQcat <- permutePLSnestedCV(df_outcomes$ctq_dich01_multi01, df_CpG_m, nrepeats = repeats, nfolds = folds, nperms = perms, classification = T)
+write.csv(plsPerm_all_CTQcat, here("Results", "plsPerm_all_CTQcat.csv"))
 
 # p-value
 df_CTQcat_perms <- read.csv(here("Results", "plsPerm_all_CTQcat.csv"))

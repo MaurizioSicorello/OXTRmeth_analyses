@@ -73,6 +73,7 @@ permutePLSnestedCV <- function(outcome, predictors, nrepeats, nfolds, nperms, ma
     outcomePerm <- sample(outcome)
     savePerm[i] <- PLSnestedCV(outcomePerm, predictors, nrepeats, nfolds, maxComps, setSeed = round(runif(1, 1000, 4000)), classification = classification)[[1]]
     
+    cat('\r iteration:', i, 'of', nperms)
   }
   
   return(savePerm)
