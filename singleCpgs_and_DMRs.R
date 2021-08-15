@@ -111,12 +111,6 @@ summary(decideTests(fit.m2))
 DMPs <- topTable(fit.m2,  num = Inf)
 head(DMPs, n = 10)
 
-# repeat with m values (recommended)
-#methylation[methylation == 0] <- 0.000001
-
-#methylation <- wateRmelon::Beta2M(methylation) 
-# values of 0% are mapped to -Inf -> maybe allocate values close to zero more precisely?
-
 # plot the top 10 most signifcantly differentially methylated CpGs
 png(filename = "Figures/DMPs_group_top10.png", height = 3000, width = 2500, res = 400)
 par(mfrow = c(4,3))
@@ -295,12 +289,12 @@ DMRs_group750 <- dmrcate(myAnnotation_group, lambda = 750)
 df_expr <- df_outcomes[complete.cases(df_outcomes$genExpr), ]
 df_CpG_m_expr <- df_CpG_m[rownames(df_CpG_m) %in% rownames(df_expr), ]
 
-methylation <- t(df_CpG_m_expr)
+methylation2 <- t(df_CpG_m_expr)
 
 design_expr <- model.matrix(~1 + genExpr, data = df_expr)
 
 # fit the linear model for methylation values
-fit.expr <- lmFit(methylation, design_expr)
+fit.expr <- lmFit(methylation2, design_expr)
 (fit.expr2 <- eBayes(fit.expr))
 
 # look at the numbers of DM CpGs at FDR < 0.05
@@ -313,21 +307,21 @@ head(DMPs_geneExpr, n = 20)
 # DMRs
 
 # get chromosomal position by merging with glossar
-m <- data.frame(methylation)
+m <- data.frame(methylation2)
 m$CpG_Nr <- row.names(m)
 m$CpG_Nr <- gsub('m_', '', m$CpG_Nr)
 
-methylation <- dplyr::left_join(m, glossar)
-row.names(methylation) <- methylation$Chromosomal_Location
-position <- row.names(methylation)
+methylation2 <- dplyr::left_join(m, glossar)
+row.names(methylation2) <- methylation2$Chromosomal_Location
+position <- row.names(methylation2)
 
-methylation <- as.matrix(methylation[, 1:69])
+methylation2 <- as.matrix(methylation2[, 1:69])
 
 position <- stringr::str_split_fixed(position, ":", 2)
 
 chr <- position[,1]
 pos <- as.numeric(position[,2])
-rownames(methylation) <- paste(chr, pos, sep = ":")
+rownames(methylation2) <- paste(chr, pos, sep = ":")
 
 design_excl <- model.matrix(~1 + genExpr, data = df_expr)
 
@@ -335,7 +329,7 @@ methdesign <- edgeR::modelMatrixMeth(design_excl)
 coverage2 <- coverage[, c(1:nrow(df_expr))]
 
 # create bseq object needed for sequencing.annotate() function
-bseq_obj <- BSseq(M = methylation, Cov = coverage2, pos = pos, chr = chr, sampleNames = rownames(df_expr))
+bseq_obj <- BSseq(M = methylation2, Cov = coverage2, pos = pos, chr = chr, sampleNames = rownames(df_expr))
 
 # test cpgs
 myAnnotation_geneExpr <- sequencing.annotate(bseq_obj, methdesign = methdesign, all.cov = T, contrasts = F, fdr = 0.05, coef = "genExpr")
@@ -385,6 +379,77 @@ results.lm$FDR <- p.adjust(results.lm$Pr...t.., method = "BH", n = dim(results.l
 
 names(results.lm)[c(2,4)] <- c("SE", "Pval")
 
+
+##############################
+
+# repeat main analyses (single CpGs) using ctq sum score instead of group variable
+
+# matrix with methylation values
+methylation <- t(df_CpG_m)
+
+design_ctq <- model.matrix(~1 + ctq, data = df_outcomes)
+
+# fit the linear model for methylation values
+(fit.ctq <- lmFit(methylation, design_ctq))
+(fit.ctq2 = eBayes(fit.ctq))
+
+# look at the numbers of DM CpGs at FDR < 0.05
+summary(decideTests(fit.ctq2))
+
+DMPs.ctq <- topTable(fit.ctq2,  num = Inf, coef = "ctq")
+head(DMPs.ctq, n = 10)
+
+# results differ compared to the analysis of group differences 
+
+
+# DMR analysis
+
+m <- data.frame(methylation)
+m$CpG_Nr <- row.names(m)
+m$CpG_Nr <- gsub('m_', '', m$CpG_Nr)
+
+methylation <- dplyr::left_join(m, glossar)
+row.names(methylation) <- methylation$Chromosomal_Location
+position <- row.names(methylation)
+
+methylation <- as.matrix(methylation[, 1:110])
+
+position <- stringr::str_split_fixed(position, ":", 2)
+
+chr <- position[,1]
+pos <- as.numeric(position[,2])
+rownames(methylation) <- paste(chr, pos, sep = ":")
+
+methdesign_ctq <- edgeR::modelMatrixMeth(design_ctq)
+
+# create bseq object needed for sequencing.annotate() function
+bseq_obj <- BSseq(M = methylation, Cov = coverage, pos = pos, chr = chr, sampleNames = rownames(df_outcomes))
+
+
+# test cpgs
+myAnnotation_ctq <- sequencing.annotate(bseq_obj, methdesign = methdesign_ctq, all.cov = T, contrasts = F, fdr = 0.05, coef = "ctq")
+str(myAnnotation_ctq)
+
+# look for DMRs within 500bp
+DMRs_ctq <- dmrcate(myAnnotation_ctq, lambda = 500)
+
+(results.ranges.ctq <- extractRanges(DMRs_ctq))
+
+results.stats.ctq <- data.frame(myAnnotation_ctq@ranges@elementMetadata@listData)
+results.cpgs.ctq <- data.frame(myAnnotation_ctq@ranges@ranges@start)
+
+(singleCpgs_ctq <- results.cpgs.ctq[results.stats.ctq$is.sig == T, ])
+
+dmrOxCtq <- pos[pos >= results.ranges.ctq@ranges@start & pos <= results.ranges.ctq@ranges@start + results.ranges.ctq@ranges@width - 1]
+
+# add chromosome to cpg position so set as name
+dmrOxCtq <- paste("chr3", dmrOxCtq, sep = ".")
+
+# get all cpgs within the ranges
+m <- data.frame(t(methylation))
+
+dmrCtq <- m[names(m) %in% dmrOxCtq]
+
 ##############################
 
 
@@ -397,7 +462,8 @@ list_results <- list("DMPs_Group" = DMPs, "DMPs_Group_ageControlled" = DMPs.age,
                      "DMR_group750bp" = results.ranges750,
                      "DMR_group_ageControlled" = results.ranges_age,
                      "T-tests_Group" = results.ttest,
-                     "LinearModels_GeneExpr" = results.lm)
+                     "LinearModels_GeneExpr" = results.lm,
+                     "DMPs_ctq" = DMPs.ctq, "DMR_ctq" = results.ranges.ctq)
 write.xlsx(list_results, file = "Results/DMPs_and_DMRs.xlsx", colNames = T, rowNames = T)
 
 ##############################
@@ -433,13 +499,59 @@ dmr_pos <- which(oxtrPlot$pos >= results.ranges@ranges@start & oxtrPlot$pos <= r
 
 png(filename = "Figures/OXTR_singleCpgs_Group_and_genExpr.png", width = 2000, height = 1500, type = "cairo", res = 300)
 ggplot() + 
-  geom_point(data = oxtrPlot[-dmr_pos, ], aes(oxtrPlot$pos[-dmr_pos], oxtrPlot$log10_P_Group[-dmr_pos], colour = factor(oxtrPlot$segment2, levels = unique(oxtrPlot$segment2))[-dmr_pos]), shape = 2) +
-  geom_point(data = oxtrPlot[dmr_pos, ], aes(oxtrPlot$pos[dmr_pos], oxtrPlot$log10_P_Group[dmr_pos], colour = factor(oxtrPlot$segment2, levels = unique(oxtrPlot$segment2))[dmr_pos]), shape = 15) +
+  geom_point(data = oxtrPlot[-dmr_pos, ], aes(oxtrPlot$pos[-dmr_pos], oxtrPlot$log10_P_Group[-dmr_pos], colour = factor(oxtrPlot$segment2[-dmr_pos], levels = unique(segment2))), shape = 2) +
+  geom_point(data = oxtrPlot[dmr_pos, ], aes(oxtrPlot$pos[dmr_pos], oxtrPlot$log10_P_Group[dmr_pos], colour = factor(oxtrPlot$segment2[dmr_pos], levels = unique(segment2))), shape = 15) +
   geom_point(data = oxtrPlot, aes(pos, log10_P_GeneExpr, colour = factor(segment2, levels = unique(segment2))), shape = 1) +
-  geom_hline(yintercept = (-log10(0.001)), linetype = 1) + # fdr 5%
-  #geom_hline(yintercept = (-log10(0.007)), linetype = 2) + # fdr 10%
+  geom_hline(yintercept = (-log10(0.001)), linetype = 1) + # fdr 5% (group)
+  #geom_hline(yintercept = (-log10(0.001)), linetype = 2) + 
   geom_hline(yintercept = (-log10(0.05)), linetype = 2) + # nominal p < 0.05
-  ylim(0, 4) + labs(x = "Position on chromosome 3", y = "-log10 P-Value") + 
+  ylim(0, 7) + labs(x = "Position on chromosome 3", y = "-log10 P-Value") + 
+  theme_classic() +
+  theme(legend.position = "bottom") +
+  labs(colour = '') +
+  scale_x_reverse()
+dev.off()
+
+
+######
+
+# same plot but with pvalues from the ctq models instead of group variable
+
+pLog <- -log10(DMPs.ctq$P.Value)
+cg_names <- row.names(DMPs.ctq)
+oxtrPlot <- data.frame(cg_names, pLog)
+
+
+dmpsG <- DMPs_geneExpr
+
+dmpsG$pLog_genExpr <- -log10(dmpsG$P.Value)
+dmpsG$cg_names <- row.names(dmpsG)
+oxtrPlot <- merge(oxtrPlot, dmpsG)[c(1,2,9)]
+
+names(oxtrPlot) <- c("CpG", "log10_P_Ctq", "log10_P_GeneExpr")
+
+# merge with 'glossar' data frame to get different names for the cpgs
+oxtrPlot$CpG <- gsub('m_', '', oxtrPlot$CpG)
+oxtrPlot <- dplyr::left_join(oxtrPlot, glossar, by = c("CpG" = "CpG_Nr"))
+oxtrPlot <- dplyr::left_join(oxtrPlot, dfcodes)
+
+# split to get the bp position
+position <- str_split_fixed(oxtrPlot$Chromosomal_Location, ":", 2)
+oxtrPlot$pos <- as.numeric(position[,2])
+
+oxtrPlot <- oxtrPlot[with(oxtrPlot, order(pos, decreasing = T)), ]
+
+dmr_pos <- which(oxtrPlot$pos >= results.ranges.ctq@ranges@start & oxtrPlot$pos <= results.ranges.ctq@ranges@start + results.ranges.ctq@ranges@width - 1)
+
+png(filename = "Figures/OXTR_singleCpgs_Ctq_and_genExpr.png", width = 2000, height = 1500, type = "cairo", res = 300)
+ggplot() + 
+  geom_point(data = oxtrPlot[-dmr_pos, ], aes(oxtrPlot$pos[-dmr_pos], oxtrPlot$log10_P_Ctq[-dmr_pos], colour = factor(oxtrPlot$segment2, levels = unique(segment2))[-dmr_pos]), shape = 2) +
+  geom_point(data = oxtrPlot[dmr_pos, ], aes(oxtrPlot$pos[dmr_pos], oxtrPlot$log10_P_Ctq[dmr_pos], colour = factor(oxtrPlot$segment2, levels = unique(segment2))[dmr_pos]), shape = 15) +
+  geom_point(data = oxtrPlot, aes(pos, log10_P_GeneExpr, colour = factor(segment2, levels = unique(segment2))), shape = 1) +
+  geom_hline(yintercept = (-log10(0.0007)), linetype = 1) + # fdr 5% (ctq)
+  #geom_hline(yintercept = (-log10(0.0007)), linetype = 2) 
+  geom_hline(yintercept = (-log10(0.05)), linetype = 2) + # nominal p < 0.05
+  ylim(0, 7) + labs(x = "Position on chromosome 3", y = "-log10 P-Value") + 
   theme_classic() +
   theme(legend.position = "bottom") +
   labs(colour = '') +
