@@ -60,11 +60,11 @@ ggplot(data = dfvar_plot, aes(x = reorder(CpG, 1:nrow(df_out)), y = insuffVar, c
   geom_point()
 
 # continue without CpGs with insufficient variance
-df_CpG_m <- df_CpG_m[, CpGvariancePs <= 0.05]
-dfcodes <- dfcodes[CpGvariancePs <= 0.05, ]
-
-# filter glossar
-glossar <- glossar[glossar$CpG_Nr %in% dfcodes$CpG, ]
+# df_CpG_m <- df_CpG_m[, CpGvariancePs <= 0.05]
+# dfcodes <- dfcodes[CpGvariancePs <= 0.05, ]
+# 
+# # filter glossar
+# glossar <- glossar[glossar$CpG_Nr %in% dfcodes$CpG, ]
 
 # matrix with coverage values
 coverage <- t(glossar$coverage_perCent_CpGs)
@@ -99,7 +99,7 @@ colnames(design) <- c(levels(df_outcomes$group))
 (fit.m <- lmFit(methylation, design))
 
 # create a contrast matrix for specific comparisons
-(contMatrix.m = makeContrasts(CGvsEA = EA - CG,levels = design))
+(contMatrix.m = makeContrasts(CGvsEA = CG - EA,levels = design))
 
 # fit the contrasts
 fit.m2 <- contrasts.fit(fit.m, contMatrix.m)
@@ -111,7 +111,7 @@ summary(decideTests(fit.m2))
 DMPs <- topTable(fit.m2,  num = Inf)
 head(DMPs, n = 10)
 
-# plot the top 10 most signifcantly differentially methylated CpGs
+# plot the top 10 most significantly differentially methylated CpGs
 png(filename = "Figures/DMPs_group_top10.png", height = 3000, width = 2500, res = 400)
 par(mfrow = c(4,3))
 sapply(rownames(DMPs)[1:10], function(cpg){minfi::plotCpg(methylation, cpg = cpg, pheno = df_outcomes$group, ylab = "beta values")})
@@ -133,6 +133,8 @@ summary(decideTests(fit.age2))
 DMPs.age <- topTable(fit.age2,  num = Inf, coef = "groupEA")
 head(DMPs.age, n = 10)
 
+DMPs.age[, c(1, 3)] <- -DMPs.age[, c(1, 3)]
+
 ##############################
 
 ## Differentially methylated regions (DMRs) using DMRcate - one of the most commonly used methods for DMR analysis, which comes with some options for sequencing data
@@ -141,13 +143,10 @@ options(connectionObserver = NULL)
 
 if (!requireNamespace("DMRcate"))
   BiocManager::install("DMRcate")
-if (!requireNamespace("DSS"))
-  BiocManager::install("DSS")
 if (!requireNamespace("bsseq"))
   BiocManager::install("bsseq")
 
 library(DMRcate)
-library(DSS)
 library(bsseq)
 
 
@@ -174,7 +173,7 @@ rownames(methylation) <- paste(chr, pos, sep = ":")
 design_excl <- model.matrix(~0 + group, data = df_outcomes)
 
 methdesign <- edgeR::modelMatrixMeth(design_excl)
-methcont <- makeContrasts(CGvsEA = groupEA - groupCG, levels = methdesign)
+methcont <- makeContrasts(CGvsEA = groupCG - groupEA, levels = methdesign)
 
 coverage <- t(coverage[c(1:nrow(df_outcomes)), ])
 
@@ -188,13 +187,17 @@ str(myAnnotation_group)
 # look for DMRs within 500bp
 DMRs_group <- dmrcate(myAnnotation_group, lambda = 500)
 
+# results table
 (results.ranges <- extractRanges(DMRs_group))
 
+# get relevant estimates 
 results.stats <- data.frame(myAnnotation_group@ranges@elementMetadata@listData)
 results.cpgs <- data.frame(myAnnotation_group@ranges@ranges@start)
 
+# individual significant cpgs (after FDR correction)
 (singleCpgs <- results.cpgs[results.stats$is.sig == T, ])
 
+# get positions of cpgs within the DMR
 dmrOx <- pos[pos >= results.ranges@ranges@start & pos <= results.ranges@ranges@start + results.ranges@ranges@width - 1]
 
 # add chromosome to cpg position so set as name
@@ -207,7 +210,7 @@ dmr <- m[names(m) %in% dmrOx]
 
 # add variables group and total ctq score
 dmr <- cbind(df_outcomes$group, df_outcomes$ctq, dmr)
-test <- data.frame(dmr[, 2:15])
+test <- data.frame(dmr[, 2:11])
 
 # get a correlation matrix of all cpgs within the ranges and ctq sum score
 psych::corr.test(test)
@@ -217,7 +220,7 @@ psych::corr.test(test)
 #corDMR <- corr.test(test)
 #apaTables::apa.cor.table(corDMR, filename = "outputs/correlations_DMR_with_ctq.doc")
 
-dmr$meanDMR <- rowMeans(dmr[3:15], na.rm = T)
+dmr$meanDMR <- rowMeans(dmr[3:11], na.rm = T)
 names(dmr)[1:2] <- c("group", "ctq")
 
 with(dmr, plot(meanDMR ~ ctq))
@@ -232,6 +235,7 @@ with(dmr, t.test(meanDMR ~ group, var.equal = T))
 
 # pval for mean DMR methylation is significant but potential problem of a mean value as correlations among (many) cpgs vary largely
 
+
 ## repeat DMR analysis controlling for age
 
 design_excl_age <- model.matrix(~1 + group + age_mother, data = df_outcomes)
@@ -239,33 +243,37 @@ methdesign_age <- edgeR::modelMatrixMeth(design_excl_age)
 
 bseq_obj <- BSseq(M = methylation, Cov = coverage, pos = pos, chr = chr, sampleNames = rownames(df_outcomes))
 
-myAnnotation_group_age <- sequencing.annotate(bseq_obj, methdesign = methdesign_age, all.cov = T, contrasts = F, fdr = 0.05, coef = "groupEA")
+myAnnotation_group_age <- sequencing.annotate(bseq_obj, methdesign = methdesign_age, all.cov = T, contrasts = F, fdr = 0.10, coef = "groupEA")
 str(myAnnotation_group_age)
 DMRs_group_age <- dmrcate(myAnnotation_group_age, lambda = 500)
+DMRs_group_age@meandiff <- -DMRs_group_age@meandiff 
+DMRs_group_age@maxdiff <- -DMRs_group_age@maxdiff 
 
-(results.ranges_age <- extractRanges(DMRs_group_age))
+# no individual significant cpgs after adjusting for multiple testing if FDR = 0.05
+# for FDR = 0.10 see results below (13 individual cpgs that have FDR < 0.05)
 
-# dmrcate suggests 3 individual cpgs that are significant when controlling for age (instead of 4), but the DMR still contains 13 cpgs 
+# results table
+(results.ranges_age <- extractRanges(DMRs_group_age)) # 13 cpgs included in DMR 8809133-8809238 
 
 results.stats <- data.frame(myAnnotation_group_age@ranges@elementMetadata@listData)
 results.cpgs <- data.frame(myAnnotation_group_age@ranges@ranges@start)
-
+ 
 (singleCpgs <- results.cpgs[results.stats$is.sig == T, ])
-
+ 
 dmrOx_age <- pos[pos >= results.ranges@ranges@start & pos <= results.ranges_age@ranges@start + results.ranges_age@ranges@width - 1]
-
+ 
 # add chromosome to cpg position so set as name
 dmrOx_age <- paste("chr3", dmrOx_age, sep = ".")
-
+ 
 # get all cpgs within the ranges
 dmrOx_age <- m[names(m) %in% dmrOx_age]
-
+ 
 # add variables group and total ctq score
 dmr_age <- cbind(df_outcomes$group, df_outcomes$ctq, dmrOx_age)
-
-dmr_age$meanDMR <- rowMeans(dmr_age[3:15], na.rm = T)
+ 
+dmr_age$meanDMR <- rowMeans(dmr_age[3:13], na.rm = T)
 names(dmr_age)[1:2] <- c("group", "ctq")
-
+ 
 with(dmr_age, t.test(meanDMR ~ group, var.equal = T))
 
 
@@ -273,10 +281,10 @@ with(dmr_age, t.test(meanDMR ~ group, var.equal = T))
 
 # look for DMRs within 500bp
 DMRs_group250 <- dmrcate(myAnnotation_group, lambda = 250)
-(results.ranges250 <- extractRanges(DMRs_group250)) # only 4 cpgs within 8809179-8809231   
+(results.ranges250 <- extractRanges(DMRs_group250)) # only 3 cpgs within 8809179-8809225   
 
 DMRs_group750 <- dmrcate(myAnnotation_group, lambda = 750)
-(results.ranges750 <- extractRanges(DMRs_group750)) # only 8 cpgs within 8809018-8809113
+(results.ranges750 <- extractRanges(DMRs_group750)) # 16 cpgs within 8809055-8809160
 
 
 ##############################
@@ -304,7 +312,7 @@ DMPs_geneExpr <- topTable(fit.expr2,  num = Inf)
 head(DMPs_geneExpr, n = 20)
 
 
-# DMRs
+## DMRs ##
 
 # get chromosomal position by merging with glossar
 m <- data.frame(methylation2)
@@ -342,42 +350,8 @@ DMRs_geneExpr <- dmrcate(myAnnotation_geneExpr, lambda = 500) # no individual Cp
 
 DMRs_geneExprFDR30 <- dmrcate(changeFDR(myAnnotation_geneExpr,FDR = 0.3), lambda = 500)
 
-(results.ranges_geneExprFDR30 <- extractRanges(DMRs_geneExprFDR30)) # including 40 (!) CpGs, but again - NOT MEANINGFUL 
+(results.ranges_geneExprFDR30 <- extractRanges(DMRs_geneExprFDR30)) # including 17 CpGs, but again - NOT MEANINGFUL 
 
-
-
-#############################
-
-## check if results of single Cpgs (DMPs) are similar when using t.tests/linear models instead of limma
-
-# group differences
-cpgsLev <- lapply(df_CpG_m[,], function(x) car::leveneTest(x ~ df_outcomes$group)$`Pr(>F)`)
-sort(unlist(cpgsLev)) # no equal variances for 7 cpgs
-
-cpgsTtest <- lapply(df_CpG_m[,], function(x) t.test(x ~ df_outcomes$group))
-
-t <- unlist(lapply(df_CpG_m[,], function(x) t.test(x ~ df_outcomes$group)$statistic[1]))
-df <- unlist(lapply(df_CpG_m[,], function(x) t.test(x ~ df_outcomes$group)$statistic[1]))
-SE <- unlist(lapply(df_CpG_m[,], function(x) t.test(x ~ df_outcomes$group)$stderr))
-p <- unlist(lapply(df_CpG_m[,], function(x) t.test(x ~ df_outcomes$group)$p.value))
-
-results.ttest <- data.frame(t, df, SE, p)
-
-results.ttest <- results.ttest[order(results.ttest$p),]
-results.ttest$FDR <- p.adjust(results.ttest$p, method = "BH", n = dim(results.ttest)[1])
-names(results.ttest)[4] <- "Pval"
-
-
-# linear models predicting gene expression
-
-cpgsLm <- lapply(df_CpG_m_expr[,], function(x) lm(df_expr$genExpr ~ x))
-results.lm <- t(data.frame(lapply(df_CpG_m_expr[,], function(x) summary(lm(scale(df_expr$genExpr) ~ scale(x)))$coefficients[2, ])))
-results.lm <- data.frame(results.lm)
-
-results.lm <- results.lm[order(results.lm$Pr...t..),]
-results.lm$FDR <- p.adjust(results.lm$Pr...t.., method = "BH", n = dim(results.lm)[1])
-
-names(results.lm)[c(2,4)] <- c("SE", "Pval")
 
 
 ##############################
@@ -400,6 +374,23 @@ DMPs.ctq <- topTable(fit.ctq2,  num = Inf, coef = "ctq")
 head(DMPs.ctq, n = 10)
 
 # results differ compared to the analysis of group differences 
+
+
+#repeat with covariates (age))
+
+# matrix with methylation values
+
+design_age_ctq <- model.matrix(~1 + ctq + age_mother, data = df_outcomes)
+
+# fit the linear model for methylation values
+fit.age.ctq <- lmFit(methylation, design_age_ctq)
+(fit.age2.ctq <- eBayes(fit.age.ctq))
+
+# look at the numbers of DM CpGs at FDR < 0.05
+summary(decideTests(fit.age2.ctq))
+
+DMPs.age.ctq <- topTable(fit.age2.ctq,  num = Inf, coef = "ctq")
+head(DMPs.age.ctq, n = 10)
 
 
 # DMR analysis
@@ -450,20 +441,175 @@ m <- data.frame(t(methylation))
 
 dmrCtq <- m[names(m) %in% dmrOxCtq]
 
+
+#############################
+
+## check if results of single Cpgs (DMPs) are similar when using t.tests/linear models instead of limma
+
+
+# group differences
+cpgsLev <- lapply(df_CpG_m[,], function(x) car::leveneTest(x ~ df_outcomes$group)$`Pr(>F)`)
+sort(unlist(cpgsLev)) # no equal variances for 7 cpgs
+
+cpgsTtest <- lapply(df_CpG_m[,], function(x) t.test(x ~ df_outcomes$group))
+
+## get parameters for summary table
+
+# differences in mean methylation
+diff <- unlist(lapply(df_CpG_m[,], function(x) t.test(x ~ df_outcomes$group)$estimate[2])) - 
+  unlist(lapply(df_CpG_m[,], function(x) t.test(x ~ df_outcomes$group)$estimate[1]))
+
+##########
+
+
+# differences in mean methylation
+diff <- unlist(lapply(df_CpG_m[,], function(x) t.test(x ~ df_outcomes$group)$estimate[1])) - 
+  unlist(lapply(df_CpG_m[,], function(x) t.test(x ~ df_outcomes$group)$estimate[2]))
+
+# 95% confidence intervals
+CI_lower <- unlist(lapply(df_CpG_m[,], function(x) t.test(x ~ df_outcomes$group)$conf.int[1]))
+CI_upper <- unlist(lapply(df_CpG_m[,], function(x) t.test(x ~ df_outcomes$group)$conf.int[2]))
+
+# t-statistic
+t <- unlist(lapply(df_CpG_m[,], function(x) t.test(x ~ df_outcomes$group)$statistic[1]))
+
+# degrees of freedom
+df <- unlist(lapply(df_CpG_m[,], function(x) t.test(x ~ df_outcomes$group)$parameter))
+
+# standard error
+SE <- unlist(lapply(df_CpG_m[,], function(x) t.test(x ~ df_outcomes$group)$stderr))
+
+# p-value
+p <- unlist(lapply(df_CpG_m[,], function(x) t.test(x ~ df_outcomes$group)$p.value))
+
+
+# create summary table
+results.ttest <- data.frame(diff, CI_lower, CI_upper, t, df, SE, p)
+row.names(results.ttest) <- names(df_CpG_m)
+
+results.ttest <- results.ttest[order(results.ttest$p),]
+results.ttest$FDR <- p.adjust(results.ttest$p, method = "BH", n = dim(results.ttest)[1])
+
+# calculate pooled SD
+SD <- SE  * sqrt(dim(df_outcomes)[1]) 
+
+# calculate Cohen's D
+d <- diff / SD
+
+## calculate more robust Hedges' g
+
+# empty vector
+g <- rep(NA, times = dim(df_CpG_m)[2])
+
+# loop to calculate g for every cpg site
+for (i in 1:dim(df_CpG_m)[2]) {
+  g[i] <- effsize::cohen.d(df_CpG_m[, i], 
+                           df_outcomes$group, 
+                           df_CpG_m[, i] ~ df_outcomes$group, 
+                           pooled = T, 
+                           paired = F, 
+                           na.rm = F, 
+                           hedges.correction = T)$estimate
+}
+
+# correlate d and g
+cor(d, g) 
+
+# almost perfect correlation 0.99993
+
+# reverse sign
+results.ttest$Hedges_g <- g
+
+g_ci_lower <- rep(NA, times = dim(df_CpG_m)[2]) 
+
+# loop to calculate g for every cpg site
+for (i in 1:dim(df_CpG_m)[2]) {
+  g_ci_lower[i] <- effsize::cohen.d(df_CpG_m[, i], 
+                           df_outcomes$group, 
+                           df_CpG_m[, i] ~ df_outcomes$group, 
+                           pooled = T, 
+                           paired = F, 
+                           na.rm = F, 
+                           hedges.correction = T)$conf.int[1]
+}
+
+g_ci_upper <- rep(NA, times = dim(df_CpG_m)[2]) 
+
+# loop to calculate g for every cpg site
+for (i in 1:dim(df_CpG_m)[2]) {
+  g_ci_upper[i] <- effsize::cohen.d(df_CpG_m[, i], 
+                                    df_outcomes$group, 
+                                    df_CpG_m[, i] ~ df_outcomes$group, 
+                                    pooled = T, 
+                                    paired = F, 
+                                    na.rm = F, 
+                                    hedges.correction = T)$conf.int[2]
+}
+
+results.ttest$CI_g_lower <- g_ci_lower
+results.ttest$CI_g_upper <- g_ci_upper
+
+
+names(results.ttest)[7] <- "Pval"
+
+summary(results.ttest$Hedges_g)
+summary(results.ttest$diff)
+
+
+# linear models using CTQ to predict DNAm
+
+
+cpgsLm <- lapply(df_CpG_m[,], function(x) lm(df_outcomes$ctq ~ x))
+results.lm.ctq <- t(data.frame(lapply(df_CpG_m[,], function(x) summary(lm(scale(x) ~ scale(df_outcomes$ctq)))$coefficients[2, ])))
+results.lm.ctq <- data.frame(results.lm.ctq)
+
+results.lm.ctq <- results.lm.ctq[order(results.lm.ctq$Pr...t..),]
+results.lm.ctq$FDR <- p.adjust(results.lm.ctq$Pr...t.., method = "BH", n = dim(results.lm.ctq)[1])
+
+names(results.lm.ctq)[c(2,4)] <- c("SE", "Pval")
+
+results.lm.ctq$CI_lower <- with(results.lm.ctq, Estimate - 1.96 * SE)
+results.lm.ctq$CI_upper <- with(results.lm.ctq, Estimate + 1.96 * SE)
+
+
+results.lm.ctq <- results.lm.ctq[, c(1, 6:7, 2:5)]
+
+summary(results.lm.ctq$Estimate)
+
+# linear models predicting gene expression
+
+cpgsLm <- lapply(df_CpG_m[,], function(x) lm(x ~ df_CpG_m))
+results.lm <- t(data.frame(lapply(df_CpG_m_expr[,], function(x) summary(lm(scale(df_expr$genExpr) ~ scale(x)))$coefficients[2, ])))
+results.lm <- data.frame(results.lm)
+
+results.lm <- results.lm[order(results.lm$Pr...t..),]
+results.lm$FDR <- p.adjust(results.lm$Pr...t.., method = "BH", n = dim(results.lm)[1])
+
+
+results.lm$CI_lower <- with(results.lm, Estimate - 1.96 * SE)
+results.lm$CI_upper <- with(results.lm, Estimate + 1.96 * SE)
+
+
+results.lm <- results.lm[, c(1, 6:7, 2:5)]
+
 ##############################
 
 
 # write outputs in excel sheets
 require(openxlsx)
-list_results <- list("DMPs_Group" = DMPs, "DMPs_Group_ageControlled" = DMPs.age,
+list_results <- list("DMPs_Group" = DMPs,
+                     "DMPs_ctq" = DMPs.ctq, 
                      "DMPs_geneExpression" = DMPs_geneExpr[, 1:6],
+                     "DMPs_Group_ageControlled" = DMPs.age,
+                     "DMPs_CTQ_ageControlled" = DMPs.age.ctq,
+                     "T-tests_Group" = results.ttest,
+                     "LinearModels_CTQ" = results.lm.ctq,
+                     "LinearModels_GeneExpr" = results.lm,
                      "DMR_group" = results.ranges,
                      "DMR_group250bp" = results.ranges250,
                      "DMR_group750bp" = results.ranges750,
                      "DMR_group_ageControlled" = results.ranges_age,
-                     "T-tests_Group" = results.ttest,
-                     "LinearModels_GeneExpr" = results.lm,
-                     "DMPs_ctq" = DMPs.ctq, "DMR_ctq" = results.ranges.ctq)
+                     "DMR_ctq" = results.ranges.ctq)
 write.xlsx(list_results, file = "Results/DMPs_and_DMRs.xlsx", colNames = T, rowNames = T)
 
 ##############################
@@ -497,19 +643,22 @@ oxtrPlot <- oxtrPlot[with(oxtrPlot, order(pos, decreasing = T)), ]
 
 dmr_pos <- which(oxtrPlot$pos >= results.ranges@ranges@start & oxtrPlot$pos <= results.ranges@ranges@start + results.ranges@ranges@width - 1)
 
+oxtrPlot$pos <- factor(oxtrPlot$pos, levels = unique(oxtrPlot$pos))
+
+oxtrPlot$CpG <- factor(oxtrPlot$CpG, labels = 1:length(oxtrPlot$CpG))
+
 png(filename = "Figures/OXTR_singleCpgs_Group_and_genExpr.png", width = 2000, height = 1500, type = "cairo", res = 300)
 ggplot() + 
   geom_point(data = oxtrPlot[-dmr_pos, ], aes(oxtrPlot$pos[-dmr_pos], oxtrPlot$log10_P_Group[-dmr_pos], colour = factor(oxtrPlot$segment2[-dmr_pos], levels = unique(segment2))), shape = 2) +
   geom_point(data = oxtrPlot[dmr_pos, ], aes(oxtrPlot$pos[dmr_pos], oxtrPlot$log10_P_Group[dmr_pos], colour = factor(oxtrPlot$segment2[dmr_pos], levels = unique(segment2))), shape = 15) +
   geom_point(data = oxtrPlot, aes(pos, log10_P_GeneExpr, colour = factor(segment2, levels = unique(segment2))), shape = 1) +
-  geom_hline(yintercept = (-log10(0.001)), linetype = 1) + # fdr 5% (group)
-  #geom_hline(yintercept = (-log10(0.001)), linetype = 2) + 
   geom_hline(yintercept = (-log10(0.05)), linetype = 2) + # nominal p < 0.05
-  ylim(0, 7) + labs(x = "Position on chromosome 3", y = "-log10 P-Value") + 
+  ylim(0, 5) + labs(x = "OXTR CpG Site", y = "-log10 P-Value") + 
   theme_classic() +
-  theme(legend.position = "bottom") +
+  theme(legend.position = "right") +
   labs(colour = '') +
-  scale_x_reverse()
+  scale_x_discrete(limits = rev, labels = NULL) +
+  scale_color_brewer(palette = "Spectral")
 dev.off()
 
 
@@ -521,14 +670,13 @@ pLog <- -log10(DMPs.ctq$P.Value)
 cg_names <- row.names(DMPs.ctq)
 oxtrPlot <- data.frame(cg_names, pLog)
 
-
 dmpsG <- DMPs_geneExpr
 
 dmpsG$pLog_genExpr <- -log10(dmpsG$P.Value)
 dmpsG$cg_names <- row.names(dmpsG)
 oxtrPlot <- merge(oxtrPlot, dmpsG)[c(1,2,9)]
 
-names(oxtrPlot) <- c("CpG", "log10_P_Ctq", "log10_P_GeneExpr")
+names(oxtrPlot) <- c("CpG", "log10_P_CTQ", "log10_P_GeneExpr")
 
 # merge with 'glossar' data frame to get different names for the cpgs
 oxtrPlot$CpG <- gsub('m_', '', oxtrPlot$CpG)
@@ -543,17 +691,23 @@ oxtrPlot <- oxtrPlot[with(oxtrPlot, order(pos, decreasing = T)), ]
 
 dmr_pos <- which(oxtrPlot$pos >= results.ranges.ctq@ranges@start & oxtrPlot$pos <= results.ranges.ctq@ranges@start + results.ranges.ctq@ranges@width - 1)
 
-png(filename = "Figures/OXTR_singleCpgs_Ctq_and_genExpr.png", width = 2000, height = 1500, type = "cairo", res = 300)
+oxtrPlot$pos <- factor(oxtrPlot$pos, levels = unique(oxtrPlot$pos))
+
+oxtrPlot$CpG <- factor(oxtrPlot$CpG, labels = 1:length(oxtrPlot$CpG))
+
+png(filename = "Figures/OXTR_singleCpgs_CTQ_and_genExpr.png", width = 2000, height = 1500, type = "cairo", res = 300)
 ggplot() + 
-  geom_point(data = oxtrPlot[-dmr_pos, ], aes(oxtrPlot$pos[-dmr_pos], oxtrPlot$log10_P_Ctq[-dmr_pos], colour = factor(oxtrPlot$segment2, levels = unique(segment2))[-dmr_pos]), shape = 2) +
-  geom_point(data = oxtrPlot[dmr_pos, ], aes(oxtrPlot$pos[dmr_pos], oxtrPlot$log10_P_Ctq[dmr_pos], colour = factor(oxtrPlot$segment2, levels = unique(segment2))[dmr_pos]), shape = 15) +
+  geom_point(data = oxtrPlot[-dmr_pos, ], aes(oxtrPlot$pos[-dmr_pos], oxtrPlot$log10_P_CTQ[-dmr_pos], colour = factor(oxtrPlot$segment2[-dmr_pos], levels = unique(segment2))), shape = 2) +
+  geom_point(data = oxtrPlot[dmr_pos, ], aes(oxtrPlot$pos[dmr_pos], oxtrPlot$log10_P_CTQ[dmr_pos], colour = factor(oxtrPlot$segment2[dmr_pos], levels = unique(segment2))), shape = 15) +
   geom_point(data = oxtrPlot, aes(pos, log10_P_GeneExpr, colour = factor(segment2, levels = unique(segment2))), shape = 1) +
-  geom_hline(yintercept = (-log10(0.0007)), linetype = 1) + # fdr 5% (ctq)
-  #geom_hline(yintercept = (-log10(0.0007)), linetype = 2) 
   geom_hline(yintercept = (-log10(0.05)), linetype = 2) + # nominal p < 0.05
-  ylim(0, 7) + labs(x = "Position on chromosome 3", y = "-log10 P-Value") + 
+  ylim(0, 7) + labs(x = "OXTR CpG Site", y = "-log10 P-Value") + 
   theme_classic() +
-  theme(legend.position = "bottom") +
+  theme(legend.position = "right") +
   labs(colour = '') +
-  scale_x_reverse()
+  scale_x_discrete(limits = rev, labels = NULL) +
+  scale_color_brewer(palette = "Spectral")
 dev.off()
+
+sessionInfo()
+
