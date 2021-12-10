@@ -1,10 +1,14 @@
 
-# TO DO: (2) rerun mediation analysis for continuous CTQ in matlab
-# (6) Antrag fertigstellen
+
+# corrplots mit allen CpGs
+
+# meeting:
+# talk about shinyapp
+# plan paper
 
 # ideas for shinyapp:
-
-# variance compared to sensitivity, percent outliers, skew, p-value DMR, cluster assignment, PLS loadings, both for kids and mothers
+# variance compared to sensitivity, percent outliers, skew, p-value DMR, bivariate correlations, Bayes faktoren, cluster assignment, 
+# PLS loadings (?), both for kids and mothers
 
 
 
@@ -40,6 +44,28 @@ dfcodes = dfcodes[dfcodes$CpG %in% str_replace(names(df_CpG_m), "_m_", "_"),]
 # plot methylation across CpGs to check for sufficient variance
 boxplot(df_CpG_m, range = 1.5)
 
+
+# methylation on Exon 1
+median(as.matrix(df_CpG_m[,which(dfcodes$segment2 == "exon1")]))
+iqr(as.matrix(df_CpG_m[,which(dfcodes$segment2 == "exon1")]))
+describe(df_CpG_m)
+mean(describe(df_CpG_m)[which(dfcodes$segment2 == "exon1"), "skew"])
+
+
+# methylation on MT2
+median(as.matrix(df_CpG_m[,which(dfcodes$segment2 == "MT2")]))
+iqr(as.matrix(df_CpG_m[,which(dfcodes$segment2 == "MT2")]))
+describe(df_CpG_m)
+mean(describe(df_CpG_m)[which(dfcodes$segment2 == "MT2"), "skew"])
+
+
+# methylation on enhancer
+median(as.matrix(df_CpG_m[,which(dfcodes$segment2 == "enhancer")]))
+iqr(as.matrix(df_CpG_m[,which(dfcodes$segment2 == "enhancer")]))
+describe(df_CpG_m)
+mean(describe(df_CpG_m)[which(dfcodes$segment2 == "enhancer"), "skew"])
+
+
 # count/plot number of outliers per CpG (3*IQR)
 out_count = as.data.frame(matrix(nrow = ncol(df_CpG_m), ncol = 2, dimnames = list(NULL, c("CpG", "nOut"))))
 out_count$CpG = str_replace(names(df_CpG_m), "_m_", "_")
@@ -48,52 +74,6 @@ df_out = merge(out_count, dfcodes, by = "CpG", sort = F)
 ggplot(data = df_out, aes(x = reorder(CpG, 1:nrow(df_out)), y = nOut, colour = segment2)) + 
   geom_point()
 
-
-
-# # mean sensitivity from Moser et al. (2020), Table S7, rightmost column
-# meanSens = mean(c(0.67, 1.37, 1.39, 1.51, 1.24, 2.28))/100
-# 
-# # test which CpGs have variance higher than chance
-# varTestFun <- function(x, referenceVar){
-#   chi_square = ((length(x)-1)*var(x))/referenceVar
-#   p = pchisq(chi_square, df = length(x)-1, lower.tail = F)
-#   p
-# }
-# CpGvariancePs = apply(df_CpG_m, 2, varTestFun, meanSens^2)
-# sum(CpGvariancePs > 0.05)
-# sum(p.adjust(CpGvariancePs, method = "fdr") > 0.05)
-# dfvar_plot = data.frame(dfcodes, CpGvariancePs)
-# dfvar_plot$insuffVar = ifelse(CpGvariancePs > 0.05, 1, 0)
-# 
-# ggplot(data = dfvar_plot, aes(x = reorder(CpG, 1:nrow(df_out)), y = insuffVar, colour = segment2)) + 
-#   geom_point()
-
-
-df_CpGwiseSDs <- as.numeric(read.csv2(here("Data", "OXTRStabwSingleCpGs.csv"))[,3])^2
-df_CpGwiseSDs <- c(df_CpGwiseSDs, rep(0.0228^2, times = ncol(df_CpG_m)-length(df_CpGwiseSDs)))
-dfchi <- nrow(df_CpG_m)-1
-CpGvariancePs <- numeric(ncol(df_CpG_m))
-
-for(i in 1:ncol(df_CpG_m)){
-  
-  chi_square <- dfchi*var(df_CpG_m[,i])/df_CpGwiseSDs[i]
-  CpGvariancePs[i] = pchisq(chi_square, df = dfchi, lower.tail = F)
-  
-}
-
-pf(2.5, 109, 11, lower.tail = F)
-
-sum(CpGvariancePs > 0.05)
-sum(p.adjust(CpGvariancePs, method = "fdr") > 0.05)
-dfvar_plot = data.frame(dfcodes, CpGvariancePs)
-dfvar_plot$insuffVar = ifelse(CpGvariancePs > 0.05, 1, 0)
-
-ggplot(data = dfvar_plot, aes(x = reorder(CpG, 1:nrow(df_out)), y = insuffVar, colour = segment2)) +
-  geom_point()
-
-# continue without CpGs with insufficient variance
-df_CpG_m <- df_CpG_m[, CpGvariancePs <= 0.05]
-dfcodes <- dfcodes[CpGvariancePs <= 0.05, ]
 
 # correlation plot 
 CpG_corr = cor(df_CpG_m, use = "pairwise.complete.obs")
@@ -104,22 +84,19 @@ pdf(here("Figures", "corrPlot_mother.pdf"))
 corrplot::corrplot(CpG_corr, tl.pos = "d", tl.cex = 0.25, method = "color", type = "upper", tl.col = "black")
 dev.off()
 
+mean(CpG_corr[132:182, 132:182])
+mean(CpG_corr[53:64, 53:64])
+
+
+
+
+
 
 #################################
 # unsupervised datra-driven description of OXTR
 
 # z score variables
 df_CpG_m_z = scale(df_CpG_m)
-
-
-#################
-# factor analysis
-KMO(df_CpG_m_z)
-fa.parallel(df_CpG_m_z, fa="pc")
-pca_all = principal(df_CpG_m, nfactors=7, rotate="oblimin")
-pca_all # factor intercorrelations neglegible
-pca_all = principal(df_CpG_m, nfactors=7, rotate="varimax")
-pca_all$loadings
 
 
 #################
@@ -158,7 +135,7 @@ ggplot(data = df_clustMem_long, aes(x = reorder(dfcodes.CpG, rep((1:nrow(df_clus
   geom_jitter(width = 0, height = 0.3) + scale_y_continuous(breaks=c(0, 1, 2)) + scale_x_discrete(breaks=NULL) +
   xlab("CpG Sites") + ylab("Cluster Assignment") + theme_classic() + theme(legend.title = element_blank())
 ggsave(here("Figures", "DBSCAN_clustMembership.pdf"), device = "pdf")
-
+ggsave(here("Figures", "DBSCAN_clustMembership.png"), device = "png")
 
 #################
 # hierarchical clustering (hclust)
@@ -185,39 +162,107 @@ fviz_dend(
 dev.off()
 
 
-clustAssign <- cutree(hc, k = 3)
+png(here("Figures", "Dendrogram_mothers.png"))
+fviz_dend(
+  hc,
+  k = 3,
+  horiz = TRUE,
+  rect = TRUE,
+  rect_fill = TRUE,
+  rect_border = "jco",
+  k_colors = "jco",
+  cex = 0.3
+)
+dev.off()
+
+
+
+clustAssign_mothers <- cutree(hc, k = 3)
 
 # proportions of genetic sections represented in the three clusters
-df_hclustAssign <- data.frame(dfcodes, clustAssign) 
-round(table(df_hclustAssign[df_hclustAssign$clustAssign == 1, "segment2"])/sum(clustAssign == 1), 2)
-round(table(df_hclustAssign[df_hclustAssign$clustAssign == 2, "segment2"])/sum(clustAssign == 2), 2)
-round(table(df_hclustAssign[df_hclustAssign$clustAssign == 3, "segment2"])/sum(clustAssign == 3), 2)
+df_hclustAssign_mothers <- data.frame(dfcodes, clustAssign_mothers) 
+round(table(df_hclustAssign_mothers[df_hclustAssign_mothers$clustAssign_mothers == 1, "segment2"])/sum(clustAssign_mothers == 1), 2)
+round(table(df_hclustAssign_mothers[df_hclustAssign_mothers$clustAssign_mothers == 2, "segment2"])/sum(clustAssign_mothers == 2), 2)
+round(table(df_hclustAssign_mothers[df_hclustAssign_mothers$clustAssign_mothers == 3, "segment2"])/sum(clustAssign_mothers == 3), 2)
 
 
-df_hclustAssign$DBSCANclust <- df_clustMem$res.fpc5.cluster
-df_hclustAssign$hclustRec <- ifelse(df_hclustAssign$clustAssign == 1, 
+df_hclustAssign_mothers$DBSCANclust <- df_clustMem$res.fpc5.cluster
+df_hclustAssign_mothers$hclustRec <- ifelse(df_hclustAssign_mothers$clustAssign_mothers == 1, 
                                     0,
-                                    ifelse(df_hclustAssign$clustAssign == 2, 
+                                    ifelse(df_hclustAssign_mothers$clustAssign_mothers == 2, 
                                            1,
                                            2)
                                     )
 
-round(sum(df_hclustAssign$DBSCANclust == df_hclustAssign$hclustRec)/nrow(df_hclustAssign), 2)
+round(sum(df_hclustAssign_mothers$DBSCANclust == df_hclustAssign_mothers$hclustRec)/nrow(df_hclustAssign_mothers), 2)
 
 
 
 #################################
 # supervised data-driven description of OXTR
 
+
+
+# # mean sensitivity from Moser et al. (2020), Table S7, rightmost column
+# meanSens = mean(c(0.67, 1.37, 1.39, 1.51, 1.24, 2.28))/100
+# 
+# # test which CpGs have variance higher than chance
+# varTestFun <- function(x, referenceVar){
+#   chi_square = ((length(x)-1)*var(x))/referenceVar
+#   p = pchisq(chi_square, df = length(x)-1, lower.tail = F)
+#   p
+# }
+# CpGvariancePs = apply(df_CpG_m, 2, varTestFun, meanSens^2)
+# sum(CpGvariancePs > 0.05)
+# sum(p.adjust(CpGvariancePs, method = "fdr") > 0.05)
+# dfvar_plot = data.frame(dfcodes, CpGvariancePs)
+# dfvar_plot$insuffVar = ifelse(CpGvariancePs > 0.05, 1, 0)
+# 
+# ggplot(data = dfvar_plot, aes(x = reorder(CpG, 1:nrow(df_out)), y = insuffVar, colour = segment2)) + 
+#   geom_point()
+
+
+df_CpGwiseVars <- as.numeric(read.csv2(here("Data", "OXTRStabwSingleCpGs.csv"))[,3])^2
+df_CpGwiseVars <- c(df_CpGwiseVars, rep(0.0228^2, times = ncol(df_CpG_m)-length(df_CpGwiseVars)))
+dfchi <- nrow(df_CpG_m)-1
+CpGvariancePs <- numeric(ncol(df_CpG_m))
+
+# descriptives for sensitivity
+median(sqrt(df_CpGwiseVars))
+iqr(sqrt(df_CpGwiseVars))
+range(sqrt(df_CpGwiseVars))
+
+
+for(i in 1:ncol(df_CpG_m)){
+  
+  chi_square <- dfchi*var(df_CpG_m[,i])/df_CpGwiseVars[i]
+  CpGvariancePs[i] = pchisq(chi_square, df = dfchi, lower.tail = F)
+  
+}
+
+pf(2.5, 109, 11, lower.tail = F)
+
+sum(CpGvariancePs > 0.05)
+sum(p.adjust(CpGvariancePs, method = "fdr") > 0.05)
+dfvar_plot = data.frame(dfcodes, CpGvariancePs)
+dfvar_plot$insuffVar = ifelse(CpGvariancePs > 0.05, 1, 0)
+
+ggplot(data = dfvar_plot, aes(x = reorder(CpG, 1:nrow(df_out)), y = insuffVar, colour = segment2)) +
+  geom_point()
+
+# continue without CpGs with insufficient variance
+df_CpG_m <- df_CpG_m[, CpGvariancePs <= 0.05]
+dfcodes <- dfcodes[CpGvariancePs <= 0.05, ]
+
+
+
 #################
 # ML settings
 maxcomp = 30
 repeats = 2
-repeats2 = 10
 folds = 5
 perms = 1000
 
-fitControlFinal <- trainControl(method = "repeatedcv", number = folds, repeats = 10)
 plsGrid <- expand.grid(ncomp = seq(1, maxcomp))
 
 #################
@@ -246,6 +291,8 @@ ggplot(data = df_GeneExpr_optComp, aes(y = value, x = ncomp, group = variable)) 
   geom_point(data = df_GeneExpr_optComp_min, colour = "darkblue") + 
   
   theme_classic() + ylab("RMSE (cross-validated)") + xlab("number of components")
+ggsave(here("figures", "numberComponents_geneExpr.png"), device = "png")
+
 
 # create final model with optimal number of components
 geneExpr_finalModel = plsr(DV ~ .,
@@ -304,6 +351,8 @@ ggplot(data = df_CTQ_optComp, aes(y = value, x = ncomp, group = variable)) +
   
   theme_classic() + ylab("RMSE (cross-validated)") + xlab("number of components")
 
+ggsave(here("figures", "numberComponents_CTQ.png"), device = "png")
+
 # create final model with optimal number of components
 CTQ_finalModel = plsr(DV ~ .,
                            data = PLSnested_CTQ$dat,
@@ -361,7 +410,11 @@ ggplot(data = df_CTQcat_optComp, aes(y = value, x = ncomp, group = variable)) +
   
   geom_point(data = df_CTQcat_optComp_min, colour = "darkblue") + 
   
-  theme_classic() + ylab("RMSE (cross-validated)") + xlab("number of components")
+  theme_classic() + ylab("Accuracy (cross-validated)") + xlab("number of components")
+
+ggsave(here("figures", "numberComponents_traumaCat.png"), device = "png")
+
+
 
 # create final model with optimal number of components
 CTQcat_finalModel = plsda(x = PLSnested_CTQcat$dat[,-1], 
@@ -373,14 +426,20 @@ summary(CTQcat_finalModel)
 # plot loadings
 pls_CTQcat_loadings = CTQcat_finalModel$loadings[,1:ncol(CTQcat_finalModel$loadings)]
 dfplot_CTQcat_loadings <- data.frame(dfcodes$CpG, pls_CTQcat_loadings, dfcodes$segment2)
+dfplot_CTQcat_loadings$dfcodes.CpG <- factor(dfplot_CTQcat_loadings$dfcodes.CpG, levels = unique(dfplot_CTQcat_loadings$dfcodes.CpG))
+dfplot_CTQcat_loadings$dfcodes.segment2 <- factor(dfplot_CTQcat_loadings$dfcodes.segment2, levels = unique(dfplot_CTQcat_loadings$dfcodes.segment2))
 
 ggplot(data = dfplot_CTQcat_loadings, aes(x = reorder(dfcodes.CpG, rep((1:nrow(dfplot_CTQcat_loadings)), length.out = nrow(dfplot_CTQcat_loadings))), y = pls_CTQcat_loadings, colour = factor(dfcodes.segment2))) +
   geom_hline(yintercept=0, colour = "darkgrey") +
   geom_path(group = 1, size = 0.8) +
   
-  theme_classic() + ylim(-max(abs(pls_CTQcat_loadings))*1.5, max(abs(pls_CTQcat_loadings))*1.5) 
+  theme_classic() + ylim(-max(abs(pls_CTQcat_loadings))*1.5, max(abs(pls_CTQcat_loadings))*1.5) + ylab("PLS Loadings") + xlab("OXTR CpG Site") +
+  
+  theme(axis.text.x=element_blank(), axis.ticks.x=element_line(colour = "black"), legend.title = element_blank()) +
+  scale_color_brewer(palette="Spectral")
 
 ggsave(here("figures", "PLSloadings_catTrauma.pdf"), device = "pdf")
+ggsave(here("figures", "PLSloadings_catTrauma.png"), device = "png")
 
 
 
@@ -428,11 +487,6 @@ write.csv(dfMediation_Mat, file = "Data/MediationData.csv", row.names = F)
 
 
 
-t = PLSnested_Genexpr$dat
-
-
-
-
 
 #################
 # check pattern with unrelated variable
@@ -476,8 +530,28 @@ ggplot(data = dfRandPlot, aes(x = reorder(dfcodes.CpG, rep((1:nrow(dfRandPlot)),
   scale_color_brewer(palette="Spectral")
 
 ggsave(here("figures", "PLSloadings_random.pdf"), device = "pdf")
+ggsave(here("figures", "PLSloadings_random.png"), device = "png")
 
 
+
+
+
+##################################
+# plot multivariate mediation loadings
+
+dfMedResults <- read.table(here("results", "multivarMediation_loadings.txt"), sep = ",", header = T)
+dfMedResults_plotCat <- data.frame(dfMedResults[, c("Wcat", "Pcat")], dfcodes)
+
+ggplot(data = dfMedResults_plotCat, aes(x = reorder(CpG, 1:nrow(dfMedResults_plotCat)), y = Wcat, colour = factor(segment2))) +
+  geom_hline(yintercept=0, colour = "darkgrey") +
+  geom_path(group = 1, size = 0.8) +
+  
+  theme_classic() + ylim(-0.4, 0.4) 
+
+multiMedfdr <- p.adjust(dfMedResults$Pcat, "fdr")
+
+multiMedSig <- ifelse(multiMedfdr < 0.05, round(multiMedfdr, 3), "")
+data.frame(dfMedResults, multiMedSig)
 
 
 
@@ -510,6 +584,49 @@ ggplot(data = df_out, aes(x = reorder(CpG, 1:nrow(df_out)), y = nOut, colour = s
   geom_point()
 
 
+# correlation plot 
+CpG_corr_k = cor(df_CpG_k, use = "pairwise.complete.obs")
+colnames(CpG_corr_k) <- NULL
+rownames(CpG_corr_k) <- substring(rownames(CpG_corr_k), 7)
+
+pdf(here("Figures", "corrPlot_child.pdf"))
+corrplot::corrplot(CpG_corr_k, tl.pos = "d", tl.cex = 0.25, method = "color", type = "upper", tl.col = "black")
+dev.off()
+
+# combined corrplot
+pdf(here("Figures", "corrPlot_combined.pdf"))
+par(mfrow=c(1,2))
+corrplot::corrplot(CpG_corr, tl.pos = "d", tl.cex = 0.25, method = "color", type = "upper", tl.col = "black", title = "Mothers")
+corrplot::corrplot(CpG_corr_k, tl.pos = "d", tl.cex = 0.25, method = "color", type = "upper", tl.col = "black", title = "Children")
+dev.off()
+
+
+mean(CpG_corr_k[132:182, 132:182])
+mean(CpG_corr_k[53:64, 53:64])
+
+# correspondance between mother and child correlation structure
+exon3ind <- CpG_corr_k
+exon3ind[132:182, 132:182] <- "exon 3 cluster"
+exon3ind[53:64, 53:64] <- "intron 1 cluster"
+exon3ind <- ifelse(exon3ind == "exon 3 cluster" | exon3ind == "intron 1 cluster", exon3ind, "other section")
+CpG_corr_mk <- data.frame(CpG_corr[lower.tri(CpG_corr)], CpG_corr_k[lower.tri(CpG_corr_k)], exon3ind[lower.tri(exon3ind)])
+names(CpG_corr_mk) <- c("mother", "child", "geneSection")
+
+cor(CpG_corr_mk$mother, CpG_corr_mk$child)
+
+ggplot(data = CpG_corr_mk, aes(y = child, x = mother, group = geneSection, colour = geneSection)) +
+  geom_point() +
+  geom_point(data = subset(CpG_corr_mk, geneSection == "intron 1 cluster"))
+
+ggsave(here("Figures", "motherChildCorrespondance.pdf"), device = "pdf")
+
+cor(CpG_corr_mk[CpG_corr_mk$geneSection == "exon 3 cluster", "mother"], CpG_corr_mk[CpG_corr_mk$geneSection == "exon 3 cluster", "child"])
+cor(CpG_corr_mk[CpG_corr_mk$geneSection == "intron 1 cluster", "mother"], CpG_corr_mk[CpG_corr_mk$geneSection == "intron 1 cluster", "child"])
+cor(CpG_corr_mk[CpG_corr_mk$geneSection == "other section", "mother"], CpG_corr_mk[CpG_corr_mk$geneSection == "other section", "child"])
+
+
+
+
 df_CpGwiseSDs <- as.numeric(read.csv2(here("Data", "OXTRStabwSingleCpGs.csv"))[,3])^2
 df_CpGwiseSDs <- c(df_CpGwiseSDs, rep(0.0228^2, times = ncol(df_CpG_k)-length(df_CpGwiseSDs)))
 dfchi <- nrow(df_CpG_k)-1
@@ -536,14 +653,6 @@ ggplot(data = dfvar_plot, aes(x = reorder(CpG, 1:nrow(df_out)), y = insuffVar, c
 df_CpG_k <- df_CpG_k[, CpGvariancePs <= 0.05]
 dfcodes <- dfcodes[CpGvariancePs <= 0.05, ]
 
-# correlation plot 
-CpG_corr = cor(df_CpG_k, use = "pairwise.complete.obs")
-colnames(CpG_corr) <- NULL
-rownames(CpG_corr) <- substring(rownames(CpG_corr), 7)
-
-pdf(here("Figures", "corrPlot_child.pdf"))
-corrplot::corrplot(CpG_corr, tl.pos = "d", tl.cex = 0.25, method = "color", type = "upper", tl.col = "black")
-dev.off()
 
 
 #################################
@@ -599,7 +708,7 @@ ggplot(data = df_clustMem_long, aes(x = reorder(dfcodes.CpG, rep((1:nrow(df_clus
   geom_jitter(width = 0, height = 0.3) + scale_y_continuous(breaks=c(0, 1, 2)) + scale_x_discrete(breaks=NULL) +
   xlab("CpG Sites") + ylab("Cluster Assignment") + theme_classic() + theme(legend.title = element_blank())
 ggsave(here("Figures", "DBSCAN_clustMembership_children.pdf"), device = "pdf")
-
+ggsave(here("Figures", "DBSCAN_clustMembership_children.png"), device = "png")
 
 #################
 # hierarchical clustering (hclust)
@@ -625,27 +734,41 @@ fviz_dend(
 )
 dev.off()
 
+png(here("Figures", "Dendrogram_children.png"))
+fviz_dend(
+  hc,
+  k = 3,
+  horiz = TRUE,
+  rect = TRUE,
+  rect_fill = TRUE,
+  rect_border = "jco",
+  k_colors = "jco",
+  cex = 0.3
+)
+dev.off()
 
-clustAssign <- cutree(hc, k = 3)
+
+clustAssign_child <- cutree(hc, k = 3)
 
 # proportions of genetic sections represented in the three clusters
-df_hclustAssign <- data.frame(dfcodes, clustAssign) 
-round(table(df_hclustAssign[df_hclustAssign$clustAssign == 1, "segment2"])/sum(clustAssign == 1), 2)
-round(table(df_hclustAssign[df_hclustAssign$clustAssign == 2, "segment2"])/sum(clustAssign == 2), 2)
-round(table(df_hclustAssign[df_hclustAssign$clustAssign == 3, "segment2"])/sum(clustAssign == 3), 2)
+df_hclustAssign_child <- data.frame(dfcodes, clustAssign_child) 
+round(table(df_hclustAssign_child[df_hclustAssign_child$clustAssign_child == 1, "segment2"])/sum(clustAssign_child == 1), 2)
+round(table(df_hclustAssign_child[df_hclustAssign_child$clustAssign_child == 2, "segment2"])/sum(clustAssign_child == 2), 2)
+round(table(df_hclustAssign_child[df_hclustAssign_child$clustAssign_child == 3, "segment2"])/sum(clustAssign_child == 3), 2)
 
 
-df_hclustAssign$DBSCANclust <- df_clustMem$res.fpc5.cluster
-df_hclustAssign$hclustRec <- ifelse(df_hclustAssign$clustAssign == 1, 
+df_hclustAssign_child$DBSCANclust <- df_clustMem$res.fpc5.cluster
+df_hclustAssign_child$hclustRec <- ifelse(df_hclustAssign_child$clustAssign_child == 1, 
                                     0,
-                                    ifelse(df_hclustAssign$clustAssign == 2, 
+                                    ifelse(df_hclustAssign_child$clustAssign_child == 2, 
                                            1,
                                            2)
 )
 
-round(sum(df_hclustAssign$DBSCANclust == df_hclustAssign$hclustRec)/nrow(df_hclustAssign), 2)
+round(sum(df_hclustAssign_child$DBSCANclust == df_hclustAssign_child$hclustRec)/nrow(df_hclustAssign_child), 2)
 
 
-
-
+# mother-child agreement in clustering solutions
+round(sum(df_hclustAssign_child$hclustRec == df_hclustAssign_mothers$hclustRec)/nrow(df_hclustAssign_child), 2)
+round(sum(df_hclustAssign_child$DBSCANclust == df_hclustAssign_mothers$DBSCANclust)/nrow(df_hclustAssign_child), 2)
 

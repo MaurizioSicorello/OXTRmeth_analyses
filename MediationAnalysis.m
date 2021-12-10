@@ -24,8 +24,8 @@ t = multivariateMediation(pdm, 'nPDM', 4, 'svd')
 varRetained = pdm.dat.M_tilde*pdm.dat.Dt;
 sum(var(varRetained)/size(mm, 2))
 
-cd('..\Results')
-pdmBoot = multivariateMediation(pdm, 'nPDM', 4, 'svd', 'bootPDM', 'Bsamp', 5000, 'save2file', 'multimedBootResults_cont.mat', 'returnbootsamples');
+%cd('..\Results')
+%pdmBoot = multivariateMediation(pdm, 'nPDM', 4, 'svd', 'bootPDM', 'Bsamp', 5000, 'save2file', 'multimedBootResults_cont.mat', 'returnbootsamples');
 
 
 % compute PDM for dichotomous trauma
@@ -38,7 +38,7 @@ sum(var(varRetained)/size(mm, 2))
 % pdm2Boot = multivariateMediation(pdm, 'nPDM', 4, 'svd', 'bootPDM', 'Bsamp', 5000, 'save2file', 'multimedBootResults_cat.mat', 'returnbootsamples');
 
 
-cd('Results')
+cd('..\Results')
 
 modelCont = load('multimedBootResults_cont.mat')
 bootABcont = modelCont.out.boot.SamplesTheta{1}(3,:).*modelCont.out.boot.SamplesTheta{1}(4,:);
@@ -54,8 +54,7 @@ quantile(bootABcat, 0.025)
 quantile(bootABcat, 0.975)
 plot(modelCat.out.Wfull{1})
 
-t = table(modelCont.out.Wfull{1}, modelCat.out.Wfull{1},'VariableNames', {'Wcont', 'Wcat'})
+t = table(modelCont.out.Wfull{1}, modelCont.out.boot.p{1, 1}, modelCat.out.Wfull{1}, modelCat.out.boot.p{1, 1}, 'VariableNames', {'Wcont', 'Pcont','Wcat', 'Pcat'})
 
-
-length(modelCont.out.Wfull{1})
+writetable(t,'multivarMediation_loadings.txt')  
 
