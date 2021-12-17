@@ -7,7 +7,7 @@
 # plan paper
 
 # ideas for shinyapp:
-# variance compared to sensitivity, percent outliers, skew, p-value DMR, bivariate correlations, Bayes faktoren, cluster assignment, 
+# variance compared to sensitivity, percent outliers, p-value DMR, bivariate correlations, Bayes faktoren, cluster assignment, 
 # PLS loadings (?), both for kids and mothers
 
 
@@ -19,7 +19,7 @@
 
 # load packages
 if (!require("pacman")) install.packages("pacman")
-pacman::p_load(corrplot, mclust, party, psych, fpc, dbscan, stringr, ggplot2, EnvStats, stats, factoextra, reshape, caret, pls, plyr, here)
+pacman::p_load(corrplot, mclust, party, psych, fpc, dbscan, stringr, ggplot2, EnvStats, stats, factoextra, reshape, caret, pls, plyr, here, BayesFactor)
 
 # load custom functions
 source(here("Functions", "OXTRmeth_helperFuns.R"))
@@ -36,6 +36,8 @@ df_CpG_m = df_CpG_m[complete.cases(df_CpG_m),]
 # load identifier of gene sections
 dfcodes = read.csv(here("Data", "OXTR_segmentCodes.csv"), header = T, sep = ";")
 dfcodes = dfcodes[dfcodes$CpG %in% str_replace(names(df_CpG_m), "_m_", "_"),]
+
+
 
 
 #################################
@@ -74,7 +76,6 @@ df_out = merge(out_count, dfcodes, by = "CpG", sort = F)
 ggplot(data = df_out, aes(x = reorder(CpG, 1:nrow(df_out)), y = nOut, colour = segment2)) + 
   geom_point()
 
-
 # correlation plot 
 CpG_corr = cor(df_CpG_m, use = "pairwise.complete.obs")
 colnames(CpG_corr) <- NULL
@@ -87,7 +88,7 @@ dev.off()
 mean(CpG_corr[132:182, 132:182])
 mean(CpG_corr[53:64, 53:64])
 
-
+shiny_nOutliers <- out_count
 
 
 
@@ -196,7 +197,7 @@ df_hclustAssign_mothers$hclustRec <- ifelse(df_hclustAssign_mothers$clustAssign_
 
 round(sum(df_hclustAssign_mothers$DBSCANclust == df_hclustAssign_mothers$hclustRec)/nrow(df_hclustAssign_mothers), 2)
 
-
+shiny_clusterAssign <- df_hclustAssign_mothers
 
 #################################
 # supervised data-driven description of OXTR
@@ -254,6 +255,9 @@ ggplot(data = dfvar_plot, aes(x = reorder(CpG, 1:nrow(df_out)), y = insuffVar, c
 df_CpG_m <- df_CpG_m[, CpGvariancePs <= 0.05]
 dfcodes <- dfcodes[CpGvariancePs <= 0.05, ]
 
+shiny_pInsuffVar <- CpGvariancePs
+shiny_sensitivity <- sqrt(df_CpGwiseVars)
+shiny_empSD <- apply(df_CpG_m, 2, sd)
 
 
 #################
@@ -771,4 +775,51 @@ round(sum(df_hclustAssign_child$DBSCANclust == df_hclustAssign_child$hclustRec)/
 # mother-child agreement in clustering solutions
 round(sum(df_hclustAssign_child$hclustRec == df_hclustAssign_mothers$hclustRec)/nrow(df_hclustAssign_child), 2)
 round(sum(df_hclustAssign_child$DBSCANclust == df_hclustAssign_mothers$DBSCANclust)/nrow(df_hclustAssign_child), 2)
+
+
+#################
+# prepare variables for online table
+
+
+##########
+# Bayes factors
+
+df_BFout <- as.data.frame(matrix(nrow = nrow(dfcodes), ncol = 4, dimnames = list(NULL, c("CpGs", "BFgenExpr", "BFCTQ", "BFtrauma"))))
+
+for(i in 1:nrow(dfcodes)){
+  
+  BF_geneExpr = extractBF(correlationBF(PLSnested_Genexpr$dat[,1], PLSnested_Genexpr$dat[,i+1]))$bf
+  BF_CTQ = extractBF(correlationBF(PLSnested_CTQ$dat[,1], PLSnested_CTQ$dat[,i+1]))$bf
+  BF_trauma = extractBF(ttestBF(PLSnested_CTQcat$dat[PLSnested_CTQcat$dat$DV == levels(PLSnested_CTQcat$dat$DV)[1], i+1], 
+                                PLSnested_CTQcat$dat[PLSnested_CTQcat$dat$DV == levels(PLSnested_CTQcat$dat$DV)[2], i+1]))$bf
+  
+  df_BFout[i, ] <- c(dfcodes[i,1], BF_geneExpr, BF_CTQ, BF_trauma)
+  
+}
+
+shiny_BF <- df_BFout
+
+
+shiny_nOutliers
+shiny_clusterAssign
+shiny_empSD
+shiny_pInsuffVar
+shiny_sensitivity
+shiny_BF
+
+shinyTable <- data.frame(shiny_nOutliers, shiny_clusterAssign$hclustRec, shiny_empSD, shiny_pInsuffVar, shiny_sensitivity, shiny_BF[, 2:4])
+
+glossar <- read.csv(here("Data", "CpG_glossar.csv"))
+names(glossar)[1] <- "Chromosomal_Location"
+
+names(shinyTable)[1] <- "CpG_Nr"
+
+
+shinyTable_out <- dplyr::left_join(shinyTable, glossar)
+shinyTable_out$position <- stringr::str_split_fixed(shinyTable_out$Chromosomal_Location, ":", 2)[, 2]
+
+require(openxlsx)
+write.xlsx(shinyTable_out, file = "Results/shinyPrepareOXTRstructure.xlsx", colNames = T, rowNames = T)
+
+
 
