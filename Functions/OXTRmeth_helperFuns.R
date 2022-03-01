@@ -78,3 +78,40 @@ permutePLSnestedCV <- function(outcome, predictors, nrepeats, nfolds, nperms, ma
   
   return(savePerm)
 }
+
+
+# function for cross-validation from DNA methylation mean
+meanCrossVal <- function(dv, data, nfolds = 5){
+  
+  dfOut <- numeric(nfolds)
+  
+  for(i in 1:nfolds){
+    
+    dataNoMiss <- data[!is.na(data[, dv]), ]
+    folds <- createFolds(dataNoMiss[, dv], k = nfolds)
+    trainSet <- dataNoMiss[-folds[[1]], ]
+    testSet <- dataNoMiss[folds[[1]], ]
+    
+    model <- lm(data = trainSet, 
+                as.formula(paste(dv, "~", "rowMeans.df_CpG_m.")))
+    
+    dfOut[i] <- 1 - sum((testSet[,dv] - predict(model, newdata = testSet))^2)/(var(testSet[,dv])*(nrow(testSet)-1))
+    
+  }
+  
+  return(dfOut)
+  
+}
+
+
+# function that repeats meanCrossVal "nrepeats" times
+repeatedMeanCrossVal <- function(dv, data, nrepeats, nfolds = 5){
+  
+  dfOut <- numeric(nrepeats)
+  for(i in 1:nrepeats){
+    
+    dfOut[i] <- mean(meanCrossVal(dv, meanData))
+    
+  }
+  return(mean(dfOut))
+}
