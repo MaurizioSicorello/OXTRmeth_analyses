@@ -67,8 +67,13 @@ ggplot(data = dfvar_plot, aes(x = reorder(CpG, 1:nrow(df_out)), y = insuffVar, c
 # glossar <- glossar[glossar$CpG_Nr %in% dfcodes$CpG, ]
 
 # matrix with coverage values
+
 coverage <- t(glossar$coverage_perCent_CpGs)
+colnames(coverage) <- glossar$Chromosomal_Location
+
 coverage <- data.frame(coverage[rep(seq_len(nrow(coverage)), nrow(df_CpG_m)), ])
+
+colnames(coverage) <- str_replace(colnames(coverage), "chr3.", "chr3:")
 
 names(df_outcomes) <- c("group", "ctq", "genExpr", "age_mother")
 
@@ -81,11 +86,9 @@ df_outcomes$group <- factor(df_outcomes$group, levels = 0:1, labels = c("CG", "E
 
 ## ANALYSES - Identify differentially-methylated positions (DMPs) between groups using limma (other methods can be used)
 
-if (!requireNamespace("BiocManager", quietly = TRUE))
-  install.packages("BiocManager")
+if (!requireNamespace("BiocManager", quietly = TRUE)) install.packages("BiocManager")
 
-if (!requireNamespace("limma"))
-  BiocManager::install("limma")
+if (!requireNamespace("limma")) BiocManager::install("limma")
 
 library(limma)
 
@@ -139,12 +142,10 @@ DMPs.age[, c(1, 3)] <- -DMPs.age[, c(1, 3)]
 
 ## Differentially methylated regions (DMRs) using DMRcate - one of the most commonly used methods for DMR analysis, which comes with some options for sequencing data
 
-options(connectionObserver = NULL)
+#options(connectionObserver = NULL)
 
-if (!requireNamespace("DMRcate"))
-  BiocManager::install("DMRcate")
-if (!requireNamespace("bsseq"))
-  BiocManager::install("bsseq")
+if (!requireNamespace("DMRcate")) BiocManager::install("DMRcate")
+if (!requireNamespace("bsseq")) BiocManager::install("bsseq")
 
 library(DMRcate)
 library(bsseq)
@@ -168,7 +169,7 @@ position <- stringr::str_split_fixed(position, ":", 2)
 
 chr <- position[,1]
 pos <- as.numeric(position[,2])
-rownames(methylation) <- paste(chr, pos, sep = ":")
+row.names(methylation) <- paste(chr, pos, sep = ":")
 
 design_excl <- model.matrix(~0 + group, data = df_outcomes)
 
@@ -176,9 +177,14 @@ methdesign <- edgeR::modelMatrixMeth(design_excl)
 methcont <- makeContrasts(CGvsEA = groupCG - groupEA, levels = methdesign)
 
 coverage <- t(coverage[c(1:nrow(df_outcomes)), ])
+colnames(methylation) <- row.names(df_outcomes)
+colnames(coverage) <- row.names(df_outcomes)
+
+
+coverage <- coverage[c(str_order(row.names(coverage), decreasing = T)), ]
 
 # create bseq object needed for sequencing.annotate() function
-bseq_obj <- BSseq(M = methylation, Cov = coverage, pos = pos, chr = chr, sampleNames = rownames(df_outcomes))
+bseq_obj <- BSseq(M = methylation, Cov = coverage, pos = pos, chr = chr, sampleNames = row.names(df_outcomes))
 
 # test cpgs
 myAnnotation_group <- sequencing.annotate(bseq_obj, methdesign = methdesign, all.cov = T, contrasts = T, cont.matrix = methcont, fdr = 0.05, coef = "CGvsEA")
@@ -188,6 +194,26 @@ str(myAnnotation_group)
 DMRs_group <- dmrcate(myAnnotation_group, lambda = 500)
 
 # results table
+tools::R_user_dir("ExperimentHub", which="cache")
+moveFiles<-function(package){
+  olddir <- path.expand(rappdirs::user_cache_dir(appname=package))
+  newdir <- tools::R_user_dir(package, which="cache")
+  dir.create(path=newdir, recursive=TRUE)
+  files <- list.files(olddir, full.names =TRUE)
+  moveres <- vapply(files,
+                    FUN=function(fl){
+                      filename = basename(fl)
+                      newname = file.path(newdir, filename)
+                      file.rename(fl, newname)
+                    },
+                    FUN.VALUE = logical(1))
+  if(all(moveres)) unlink(olddir, recursive=TRUE)
+}
+
+package="ExperimentHub"
+moveFiles(package)
+
+
 (results.ranges <- extractRanges(DMRs_group))
 
 # get relevant estimates 
@@ -335,6 +361,8 @@ design_excl <- model.matrix(~1 + genExpr, data = df_expr)
 
 methdesign <- edgeR::modelMatrixMeth(design_excl)
 coverage2 <- coverage[, c(1:nrow(df_expr))]
+colnames(methylation2) <- row.names(df_expr)
+colnames(coverage2) <- row.names(df_expr)
 
 # create bseq object needed for sequencing.annotate() function
 bseq_obj <- BSseq(M = methylation2, Cov = coverage2, pos = pos, chr = chr, sampleNames = rownames(df_expr))
@@ -412,6 +440,7 @@ pos <- as.numeric(position[,2])
 rownames(methylation) <- paste(chr, pos, sep = ":")
 
 methdesign_ctq <- edgeR::modelMatrixMeth(design_ctq)
+colnames(methylation) <- row.names(df_outcomes)
 
 # create bseq object needed for sequencing.annotate() function
 bseq_obj <- BSseq(M = methylation, Cov = coverage, pos = pos, chr = chr, sampleNames = rownames(df_outcomes))
@@ -456,13 +485,6 @@ cpgsTtest <- lapply(df_CpG_m[,], function(x) t.test(x ~ df_outcomes$group))
 ## get parameters for summary table
 
 # differences in mean methylation
-diff <- unlist(lapply(df_CpG_m[,], function(x) t.test(x ~ df_outcomes$group)$estimate[2])) - 
-  unlist(lapply(df_CpG_m[,], function(x) t.test(x ~ df_outcomes$group)$estimate[1]))
-
-##########
-
-
-# differences in mean methylation
 diff <- unlist(lapply(df_CpG_m[,], function(x) t.test(x ~ df_outcomes$group)$estimate[1])) - 
   unlist(lapply(df_CpG_m[,], function(x) t.test(x ~ df_outcomes$group)$estimate[2]))
 
@@ -486,9 +508,6 @@ p <- unlist(lapply(df_CpG_m[,], function(x) t.test(x ~ df_outcomes$group)$p.valu
 # create summary table
 results.ttest <- data.frame(diff, CI_lower, CI_upper, t, df, SE, p)
 row.names(results.ttest) <- names(df_CpG_m)
-
-results.ttest <- results.ttest[order(results.ttest$p),]
-results.ttest$FDR <- p.adjust(results.ttest$p, method = "BH", n = dim(results.ttest)[1])
 
 # calculate pooled SD
 SD <- SE  * sqrt(dim(df_outcomes)[1]) 
@@ -517,7 +536,6 @@ cor(d, g)
 
 # almost perfect correlation 0.99993
 
-# reverse sign
 results.ttest$Hedges_g <- g
 
 g_ci_lower <- rep(NA, times = dim(df_CpG_m)[2]) 
@@ -549,6 +567,8 @@ for (i in 1:dim(df_CpG_m)[2]) {
 results.ttest$CI_g_lower <- g_ci_lower
 results.ttest$CI_g_upper <- g_ci_upper
 
+results.ttest <- results.ttest[order(results.ttest$p),]
+results.ttest$FDR <- p.adjust(results.ttest$p, method = "BH", n = dim(results.ttest)[1])
 
 names(results.ttest)[7] <- "Pval"
 
@@ -576,14 +596,16 @@ results.lm.ctq <- results.lm.ctq[, c(1, 6:7, 2:5)]
 
 summary(results.lm.ctq$Estimate)
 
+
 # linear models predicting gene expression
 
-cpgsLm <- lapply(df_CpG_m[,], function(x) lm(x ~ df_CpG_m))
 results.lm <- t(data.frame(lapply(df_CpG_m_expr[,], function(x) summary(lm(scale(df_expr$genExpr) ~ scale(x)))$coefficients[2, ])))
 results.lm <- data.frame(results.lm)
 
 results.lm <- results.lm[order(results.lm$Pr...t..),]
 results.lm$FDR <- p.adjust(results.lm$Pr...t.., method = "BH", n = dim(results.lm)[1])
+
+names(results.lm)[c(2,4)] <- c("SE", "Pval")
 
 
 results.lm$CI_lower <- with(results.lm, Estimate - 1.96 * SE)
@@ -594,9 +616,43 @@ results.lm <- results.lm[, c(1, 6:7, 2:5)]
 
 ##############################
 
+results.lm.ctq$CpG_Nr <- row.names(results.lm.ctq)
+results.ttest$CpG_Nr <- row.names(results.ttest)
+results.lm$CpG_Nr <- row.names(results.lm)
+
+results.lm.ctq$CpG_Nr <- stringr::str_replace(results.lm.ctq$CpG_Nr, "_m_", "_")
+results.ttest$CpG_Nr <- stringr::str_replace(results.ttest$CpG_Nr, "_m_", "_")
+results.lm$CpG_Nr <- stringr::str_replace(results.lm$CpG_Nr, "_m_", "_")
+
+
+results.lm.ctq2 <- dplyr::left_join(results.lm.ctq, glossar)
+results.lm.ctq2$position <- stringr::str_split_fixed(results.lm.ctq2$Chromosomal_Location, ":", 2)[, 2]
+results.lm.ctq2[, 1:5] <- round(results.lm.ctq2[, 1:5], 3)
+results.lm.ctq2[, 6] <- round(results.lm.ctq2[, 6], 7)
+results.lm.ctq2[, 7] <- round(results.lm.ctq2[, 7], 6)
+
+results.ttest2 <- dplyr::left_join(results.ttest, glossar)
+results.ttest2$position <- stringr::str_split_fixed(results.ttest2$Chromosomal_Location, ":", 2)[, 2]
+results.ttest2[, c(1:6, 8:9)] <- round(results.ttest2[, c(1:6, 8:9)], 3)
+results.ttest2[, 7] <- round(results.ttest2[, 7], 5)
+
+results.lm2 <- dplyr::left_join(results.lm, glossar)
+results.lm2$position <- stringr::str_split_fixed(results.lm2$Chromosomal_Location, ":", 2)[, 2]
+results.lm2[, 1:7] <- round(results.lm2[, 1:7], 3)
+
+require(openxlsx)
+write.xlsx(results.lm.ctq2, file = "Results/CTQ.xlsx", colNames = T, rowNames = T)
+write.xlsx(results.ttest2, file = "Results/Group.xlsx", colNames = T, rowNames = T)
+write.xlsx(results.lm2, file = "Results/mRNAexpr.xlsx", colNames = T, rowNames = T)
+
+
+
+
+#############################
+
 
 # write outputs in excel sheets
-require(openxlsx)
+
 list_results <- list("DMPs_Group" = DMPs,
                      "DMPs_ctq" = DMPs.ctq, 
                      "DMPs_geneExpression" = DMPs_geneExpr[, 1:6],
@@ -642,21 +698,44 @@ oxtrPlot$pos <- as.numeric(position[,2])
 oxtrPlot <- oxtrPlot[with(oxtrPlot, order(pos, decreasing = T)), ]
 
 dmr_pos <- which(oxtrPlot$pos >= results.ranges@ranges@start & oxtrPlot$pos <= results.ranges@ranges@start + results.ranges@ranges@width - 1)
+dmr_pos_name <- oxtrPlot$pos[dmr_pos]
 
 oxtrPlot$pos <- factor(oxtrPlot$pos, levels = unique(oxtrPlot$pos))
 
 oxtrPlot$CpG <- factor(oxtrPlot$CpG, labels = 1:length(oxtrPlot$CpG))
 
-png(filename = "Figures/OXTR_singleCpgs_Group_and_genExpr.png", width = 2000, height = 1500, type = "cairo", res = 300)
+library(tidyverse)
+oxtrPlot2 <- oxtrPlot %>% gather("Association_with", "Pvalue", c(log10_P_Group, log10_P_GeneExpr))
+
+oxtrPlot2$Association_with <- dplyr::recode(oxtrPlot2$Association_with,
+                                            "log10_P_Group" = "Group", 
+                                            "log10_P_GeneExpr" = "mRNA_expr") 
+####
+
+df_plot <- oxtrPlot2[!(pos %in% dmr_pos_name), c("pos", "Pvalue", "segment2", "Association_with")]
+df_plot2 <-  oxtrPlot2[pos %in% dmr_pos_name, c("pos", "Pvalue", "segment2", "Association_with")]
+
+png(filename = "Figures/FigureS12.png", width = 6000, height = 4500, type = "cairo", res = 900)
 ggplot() + 
-  geom_point(data = oxtrPlot[-dmr_pos, ], aes(oxtrPlot$pos[-dmr_pos], oxtrPlot$log10_P_Group[-dmr_pos], colour = factor(oxtrPlot$segment2[-dmr_pos], levels = unique(segment2))), shape = 2) +
-  geom_point(data = oxtrPlot[dmr_pos, ], aes(oxtrPlot$pos[dmr_pos], oxtrPlot$log10_P_Group[dmr_pos], colour = factor(oxtrPlot$segment2[dmr_pos], levels = unique(segment2))), shape = 15) +
-  geom_point(data = oxtrPlot, aes(pos, log10_P_GeneExpr, colour = factor(segment2, levels = unique(segment2))), shape = 1) +
+  geom_point(data = df_plot, 
+             aes(pos, 
+                 Pvalue, 
+                 colour = factor(segment2, levels = unique(segment2)),
+                 shape = Association_with,
+                 group = interaction(segment2,
+                                     Association_with)
+             )
+  ) +
+  geom_point(data = df_plot2, 
+             aes(pos, Pvalue, 
+                 colour = factor(segment2, levels = unique(segment2))),
+             shape = 15) +
   geom_hline(yintercept = (-log10(0.05)), linetype = 2) + # nominal p < 0.05
+  geom_hline(yintercept = (-log10(0.001)), linetype = 1) +
   ylim(0, 5) + labs(x = "OXTR CpG Site", y = "-log10 P-Value") + 
   theme_classic() +
   theme(legend.position = "right") +
-  labs(colour = '') +
+  labs(colour = '', shape = '') +
   scale_x_discrete(limits = rev, labels = NULL) +
   scale_color_brewer(palette = "Spectral")
 dev.off()
@@ -690,24 +769,392 @@ oxtrPlot$pos <- as.numeric(position[,2])
 oxtrPlot <- oxtrPlot[with(oxtrPlot, order(pos, decreasing = T)), ]
 
 dmr_pos <- which(oxtrPlot$pos >= results.ranges.ctq@ranges@start & oxtrPlot$pos <= results.ranges.ctq@ranges@start + results.ranges.ctq@ranges@width - 1)
+dmr_pos_name <- oxtrPlot$pos[dmr_pos]
 
 oxtrPlot$pos <- factor(oxtrPlot$pos, levels = unique(oxtrPlot$pos))
 
 oxtrPlot$CpG <- factor(oxtrPlot$CpG, labels = 1:length(oxtrPlot$CpG))
 
-png(filename = "Figures/OXTR_singleCpgs_CTQ_and_genExpr.png", width = 2000, height = 1500, type = "cairo", res = 300)
+library(tidyverse)
+oxtrPlot2 <- oxtrPlot %>% gather("Association_with", "Pvalue", c(log10_P_CTQ, log10_P_GeneExpr))
+
+oxtrPlot2$Association_with <- dplyr::recode(oxtrPlot2$Association_with,
+                                            "log10_P_CTQ" = "CTQ", 
+                                            "log10_P_GeneExpr" = "mRNA_expr") 
+
+
+df_plot <- oxtrPlot2[!(pos %in% dmr_pos_name), c("pos", "Pvalue", "segment2", "Association_with")]
+df_plot2 <-  oxtrPlot2[pos %in% dmr_pos_name, c("pos", "Pvalue", "segment2", "Association_with")]
+
+png(filename = "Figures/Figure5.png", width = 6000, height = 4500, type = "cairo", res = 900)
 ggplot() + 
-  geom_point(data = oxtrPlot[-dmr_pos, ], aes(oxtrPlot$pos[-dmr_pos], oxtrPlot$log10_P_CTQ[-dmr_pos], colour = factor(oxtrPlot$segment2[-dmr_pos], levels = unique(segment2))), shape = 2) +
-  geom_point(data = oxtrPlot[dmr_pos, ], aes(oxtrPlot$pos[dmr_pos], oxtrPlot$log10_P_CTQ[dmr_pos], colour = factor(oxtrPlot$segment2[dmr_pos], levels = unique(segment2))), shape = 15) +
-  geom_point(data = oxtrPlot, aes(pos, log10_P_GeneExpr, colour = factor(segment2, levels = unique(segment2))), shape = 1) +
+  geom_point(data = df_plot, 
+             aes(pos, 
+                 Pvalue, 
+                 colour = factor(segment2, levels = unique(segment2)),
+                 shape = Association_with,
+                 group = interaction(segment2,
+                                     Association_with)
+             )
+  ) +
+  geom_point(data = df_plot2, 
+             aes(pos, Pvalue, 
+                 colour = factor(segment2, levels = unique(segment2))),
+             shape = 15) +
   geom_hline(yintercept = (-log10(0.05)), linetype = 2) + # nominal p < 0.05
+  geom_hline(yintercept = (-log10(0.001)), linetype = 1) +
   ylim(0, 7) + labs(x = "OXTR CpG Site", y = "-log10 P-Value") + 
   theme_classic() +
   theme(legend.position = "right") +
-  labs(colour = '') +
+  labs(colour = '', shape = '') +
   scale_x_discrete(limits = rev, labels = NULL) +
   scale_color_brewer(palette = "Spectral")
 dev.off()
 
+
+
+
+### power curves 
+
+library(pwr)
+library(tidyverse)
+library(broom)
+
+
+effect_sizes <- seq(0.05, 0.8, 0.05) 
+sample_sizes <- seq(10, 500, 10) # going from 10 to 500 in increments of 10
+sig_level <- c(0.001, 0.01, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5)
+
+input_df_n <- crossing(effect_sizes, sample_sizes)
+input_df <- crossing(effect_sizes, sig_level)
+
+
+get_power <- function(df, n){
+  power_result <- pwr.t.test(sig.level = df %>% pull(sig_level), 
+                             d = df %>% pull(effect_sizes), n = n) %>% tidy()
+  df <- df %>% mutate(power = power_result %>% pull(power))
+  return(df)
+}
+
+
+power_curves <- get_power(input_df, n = 55)
+
+
+power_curves <- power_curves %>% mutate(effect_sizes = as.factor(effect_sizes)) 
+
+
+cols <- c("#1B9E77", "#D95F02", "#7570B3", "#E7298A", "#66A61E", "#E6AB02", "#A6761D", "#666666",
+          "#1B9E77", "#D95F02", "#7570B3", "#E7298A", "#66A61E", "#E6AB02", "#A6761D", "#666666",
+          "#1B9E77", "#D95F02", "#7570B3", "#E7298A") 
+
+png(filename = "Figures/power_ttest_fixed_n.png", width = 2000, height = 1500, type = "cairo", res = 250)
+pwr_t <- ggplot(power_curves, 
+       aes(x = sig_level,
+           y = power, 
+           colour = effect_sizes)) + 
+  geom_line()  + theme_bw() +
+  scale_y_continuous(breaks = seq(0, 1, 0.1)) + #this line change the frequency of tick marks
+  scale_x_continuous(breaks = seq(0, 0.5, 0.05), limits = c(0.001, 0.5)) + #this changes the limits of x
+  scale_color_manual(values =  cols) +
+  labs(col = "Cohen's d", x = "Significance level", y = "Power")
+pwr_t
+dev.off()
+
+get_power_n <- function(df){
+  power_result <- pwr.t.test(n = df %>% pull(sample_sizes), 
+                             d = df %>% pull(effect_sizes)) %>% tidy()
+  df <- df %>% mutate(power = power_result %>% pull(power))
+  return(df)
+}
+
+
+power_curves2 <- get_power_n(input_df_n)
+
+
+power_curves2 <- power_curves2 %>% mutate(effect_sizes = as.factor(effect_sizes)) 
+
+png(filename = "Figures/power_ttest_fixed_alpha.png", width = 7500, height = 4500, type = "cairo", res = 750)
+pwr_t2 <- ggplot(power_curves2, 
+       aes(x = sample_sizes,
+           y = power, 
+           colour = effect_sizes)) + 
+  geom_line()  + theme_bw() +
+  scale_y_continuous(breaks = seq(0, 1, 0.1)) + #this line change the frequency of tick marks
+  scale_x_continuous(breaks = seq(0, 500, 25), limits = c(10, 500)) + #this changes the limits of x
+  scale_color_manual(values =  cols) +
+  labs(col = "Cohen's d", x = "Sample size", y = "Power")
+pwr_t2
+dev.off()
+
+
+get_power <- function(df, n){
+  power_result <- pwr.r.test(sig.level = df %>% pull(sig_level), 
+                             r = df %>% pull(effect_sizes), n = n) %>% tidy()
+  df <- df %>% mutate(power = power_result %>% pull(power))
+  return(df)
+}
+
+
+power_curves <- get_power(input_df, n = 110)
+
+
+power_curves <- power_curves %>% mutate(effect_sizes = as.factor(effect_sizes)) 
+
+
+png(filename = "Figures/power_cor_fixed_n.png", width = 2000, height = 1500, type = "cairo", res = 250)
+pwr_r <- ggplot(power_curves, 
+       aes(x = sig_level,
+           y = power, 
+           colour = effect_sizes)) + 
+  geom_line()  + theme_bw() +
+  scale_y_continuous(breaks = seq(0, 1, 0.1)) + #this line change the frequency of tick marks
+  scale_x_continuous(breaks = seq(0, 0.5, 0.05), limits = c(0.001, 0.5)) + #this changes the limits of x
+  scale_color_manual(values =  cols) +
+  labs(col = "Correlation", x = "Significance level", y = "Power")
+pwr_r 
+dev.off()
+
+
+get_power_n <- function(df){
+  power_result <- pwr.r.test(n = df %>% pull(sample_sizes), 
+                             r = df %>% pull(effect_sizes)) %>% tidy()
+  df <- df %>% mutate(power = power_result %>% pull(power))
+  return(df)
+}
+
+
+power_curves2 <- get_power_n(input_df_n)
+
+
+power_curves2 <- power_curves2 %>% mutate(effect_sizes = as.factor(effect_sizes)) 
+
+png(filename = "Figures/power_cor_fixed_alpha.png", width = 2500, height = 1500, type = "cairo", res = 250)
+pwr_r2 <- ggplot(power_curves2, 
+       aes(x = sample_sizes,
+           y = power, 
+           colour = effect_sizes)) + 
+  geom_line()  + theme_bw() +
+  scale_y_continuous(breaks = seq(0, 1, 0.1)) + #this line change the frequency of tick marks
+  scale_x_continuous(breaks = seq(0, 500, 25), limits = c(10, 500)) + #this changes the limits of x
+  scale_color_manual(values =  cols) +
+  labs(col = "Correlation", x = "Sample size", y = "Power")
+pwr_r2 + theme_classic()
+dev.off()
+
+
+png(filename = "Figures/FigureS13.png", width = 7000, height = 4000, type = "cairo", res = 600)
+cowplot::plot_grid(pwr_t, pwr_r, labels = c("a", "b"), ncol = 2, nrow = 1)
+dev.off()
+
+png(filename = "Figures/FigureS14.png", width = 9000, height = 4000, type = "cairo", res = 700)
+cowplot::plot_grid(pwr_t2, pwr_r2, labels = c("a", "b"), ncol = 2, nrow = 1)
+dev.off()
+
+
+
+#### less levels of effect sizes
+
+effect_sizes <- seq(0.1, 0.8, 0.1) 
+sample_sizes <- seq(10, 500, 10) # going from 10 to 500 in increments of 10
+sig_level <- c(0.001, 0.01, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5)
+
+input_df_n <- crossing(effect_sizes, sample_sizes)
+input_df <- crossing(effect_sizes, sig_level)
+
+power_curves <- get_power(input_df, n = 55)
+
+power_curves <- power_curves %>% mutate(effect_sizes = as.factor(effect_sizes)) 
+
+
+pwr_t <- ggplot(power_curves, 
+                aes(x = sig_level,
+                    y = power, 
+                    colour = effect_sizes)) + 
+  geom_line()  + theme_bw() +
+  scale_y_continuous(breaks = seq(0, 1, 0.1)) + #this line change the frequency of tick marks
+  scale_x_continuous(breaks = seq(0, 0.5, 0.05), limits = c(0.001, 0.5)) + #this changes the limits of x
+  scale_color_brewer(palette = "Spectral") +
+  labs(col = "Cohen's d", x = "Significance level", y = "Power")
+
+
+power_curves2 <- get_power_n(input_df_n)
+
+power_curves2 <- power_curves2 %>% mutate(effect_sizes = as.factor(effect_sizes)) 
+
+pwr_t2 <- ggplot(power_curves2, 
+                 aes(x = sample_sizes,
+                     y = power, 
+                     colour = effect_sizes)) + 
+  geom_line()  + theme_bw() +
+  scale_y_continuous(breaks = seq(0, 1, 0.1)) + #this line change the frequency of tick marks
+  scale_x_continuous(breaks = seq(0, 500, 25), limits = c(10, 500)) + #this changes the limits of x
+  scale_color_brewer(palette = "Spectral") +
+  labs(col = "Cohen's d", x = "Sample size", y = "Power")
+
+power_curves <- get_power(input_df, n = 110)
+
+power_curves <- power_curves %>% mutate(effect_sizes = as.factor(effect_sizes)) 
+
+
+pwr_r <- ggplot(power_curves, 
+                aes(x = sig_level,
+                    y = power, 
+                    colour = effect_sizes)) + 
+  geom_line()  + theme_bw() +
+  scale_y_continuous(breaks = seq(0, 1, 0.1)) + #this line change the frequency of tick marks
+  scale_x_continuous(breaks = seq(0, 0.5, 0.05), limits = c(0.001, 0.5)) + #this changes the limits of x
+  scale_color_brewer(palette = "Spectral") +
+  labs(col = "Correlation", x = "Significance level", y = "Power")
+
+
+power_curves2 <- get_power_n(input_df_n)
+
+power_curves2 <- power_curves2 %>% mutate(effect_sizes = as.factor(effect_sizes)) 
+
+pwr_r2 <- ggplot(power_curves2, 
+                 aes(x = sample_sizes,
+                     y = power, 
+                     colour = effect_sizes)) + 
+  geom_line()  + theme_bw() +
+  scale_y_continuous(breaks = seq(0, 1, 0.1)) + #this line change the frequency of tick marks
+  scale_x_continuous(breaks = seq(0, 500, 25), limits = c(10, 500)) + #this changes the limits of x
+  scale_color_brewer(palette = "Spectral") +
+  labs(col = "Correlation", x = "Sample size", y = "Power")
+
+png(filename = "Figures/power_fixed_n_spectral.png", width = 3500, height = 2000, type = "cairo", res=300)
+cowplot::plot_grid(pwr_t, pwr_r, labels = c("a", "b"), ncol = 2, nrow = 1)
+dev.off()
+
+png(filename = "Figures/power_fixed_alpha_spectral.png", width = 4500, height = 2000, type = "cairo", res=350)
+cowplot::plot_grid(pwr_t2, pwr_r2, labels = c("a", "b"), ncol = 2, nrow = 1)
+dev.off()
+
+
 sessionInfo()
 
+# R version 4.1.2 (2021-11-01)
+# Platform: x86_64-apple-darwin17.0 (64-bit)
+# Running under: macOS Big Sur 11.5.2
+# 
+# Matrix products: default
+# LAPACK: /Library/Frameworks/R.framework/Versions/4.1/Resources/lib/libRlapack.dylib
+# 
+# locale:
+#   [1] en_GB.UTF-8/en_GB.UTF-8/en_GB.UTF-8/C/en_GB.UTF-8/en_GB.UTF-8
+# 
+# attached base packages:
+#   [1] stats4    grid      stats     graphics  grDevices utils     datasets  methods   base     
+# 
+# other attached packages:
+#   [1] broom_0.7.12                pwr_1.3-0                   forcats_0.5.1               dplyr_1.0.8                
+# [5] purrr_0.3.4                 readr_2.1.2                 tidyr_1.2.0                 tibble_3.1.6               
+# [9] tidyverse_1.3.1             DMRcatedata_2.12.0          ExperimentHub_2.2.1         AnnotationHub_3.2.2        
+# [13] BiocFileCache_2.2.1         dbplyr_2.1.1                bsseq_1.30.0                SummarizedExperiment_1.24.0
+# [17] Biobase_2.54.0              MatrixGenerics_1.6.0        matrixStats_0.61.0          GenomicRanges_1.46.1       
+# [21] GenomeInfoDb_1.30.1         IRanges_2.28.0              S4Vectors_0.32.3            BiocGenerics_0.40.0        
+# [25] DMRcate_2.8.5               limma_3.50.1                here_1.0.1                  plyr_1.8.6                 
+# [29] pls_2.8-0                   caret_6.0-90                lattice_0.20-45             reshape_0.8.8              
+# [33] factoextra_1.0.7            EnvStats_2.6.0              ggplot2_3.3.5               stringr_1.4.0              
+# [37] dbscan_1.1-10               fpc_2.2-9                   psych_2.1.9                 party_1.3-9                
+# [41] strucchange_1.5-2           sandwich_3.0-1              zoo_1.8-9                   modeltools_0.2-23          
+# [45] mvtnorm_1.1-3               mclust_5.4.9                corrplot_0.92               pacman_0.5.1               
+# 
+# loaded via a namespace (and not attached):
+#   [1] Hmisc_4.6-0                                         class_7.3-20                                       
+# [3] Rsamtools_2.10.0                                    foreach_1.5.2                                      
+# [5] rprojroot_2.0.2                                     crayon_1.5.0                                       
+# [7] MASS_7.3-55                                         rhdf5filters_1.6.0                                 
+# [9] nlme_3.1-155                                        backports_1.4.1                                    
+# [11] reprex_2.0.1                                        rlang_1.0.1                                        
+# [13] XVector_0.34.0                                      readxl_1.3.1                                       
+# [15] minfi_1.40.0                                        DSS_2.42.0                                         
+# [17] filelock_1.0.2                                      BiocParallel_1.28.3                                
+# [19] rjson_0.2.21                                        bit64_4.0.5                                        
+# [21] glue_1.6.2                                          rngtools_1.5.2                                     
+# [23] parallel_4.1.2                                      AnnotationDbi_1.56.2                               
+# [25] haven_2.4.3                                         tidyselect_1.1.2                                   
+# [27] XML_3.99-0.9                                        GenomicAlignments_1.30.0                           
+# [29] xtable_1.8-4                                        magrittr_2.0.2                                     
+# [31] cli_3.2.0                                           zlibbioc_1.40.0                                    
+# [33] rstudioapi_0.13                                     doRNG_1.8.2                                        
+# [35] rpart_4.1.16                                        effsize_0.8.1                                      
+# [37] ensembldb_2.18.3                                    IlluminaHumanMethylationEPICanno.ilm10b4.hg19_0.6.0
+# [39] shiny_1.7.1                                         xfun_0.30                                          
+# [41] askpass_1.1                                         multtest_2.50.0                                    
+# [43] cluster_2.1.2                                       KEGGREST_1.34.0                                    
+# [45] interactiveDisplayBase_1.32.0                       ggrepel_0.9.1                                      
+# [47] base64_2.0                                          biovizBase_1.42.0                                  
+# [49] scrime_1.3.5                                        listenv_0.8.0                                      
+# [51] Biostrings_2.62.0                                   png_0.1-7                                          
+# [53] permute_0.9-7                                       future_1.24.0                                      
+# [55] ipred_0.9-12                                        withr_2.4.3                                        
+# [57] bitops_1.0-7                                        cellranger_1.1.0                                   
+# [59] AnnotationFilter_1.18.0                             hardhat_0.2.0                                      
+# [61] pROC_1.18.0                                         pillar_1.7.0                                       
+# [63] bumphunter_1.36.0                                   cachem_1.0.6                                       
+# [65] GenomicFeatures_1.46.5                              multcomp_1.4-18                                    
+# [67] fs_1.5.2                                            flexmix_2.3-17                                     
+# [69] kernlab_0.9-29                                      DelayedMatrixStats_1.16.0                          
+# [71] vctrs_0.3.8                                         ellipsis_0.3.2                                     
+# [73] generics_0.1.2                                      nortest_1.0-4                                      
+# [75] lava_1.6.10                                         tools_4.1.2                                        
+# [77] foreign_0.8-82                                      munsell_0.5.0                                      
+# [79] DelayedArray_0.20.0                                 fastmap_1.1.0                                      
+# [81] compiler_4.1.2                                      abind_1.4-5                                        
+# [83] httpuv_1.6.5                                        rtracklayer_1.54.0                                 
+# [85] beanplot_1.2                                        Gviz_1.38.3                                        
+# [87] GenomeInfoDbData_1.2.7                              prodlim_2019.11.13                                 
+# [89] gridExtra_2.3                                       edgeR_3.36.0                                       
+# [91] utf8_1.2.2                                          later_1.3.0                                        
+# [93] recipes_0.2.0                                       jsonlite_1.8.0                                     
+# [95] scales_1.1.1                                        carData_3.0-5                                      
+# [97] sparseMatrixStats_1.6.0                             genefilter_1.76.0                                  
+# [99] lazyeval_0.2.2                                      promises_1.2.0.1                                   
+# [101] car_3.0-12                                          latticeExtra_0.6-29                                
+# [103] R.utils_2.11.0                                      checkmate_2.0.0                                    
+# [105] nor1mix_1.3-0                                       cowplot_1.1.1                                      
+# [107] statmod_1.4.36                                      siggenes_1.68.0                                    
+# [109] dichromat_2.0-0                                     BSgenome_1.62.0                                    
+# [111] HDF5Array_1.22.1                                    survival_3.3-0                                     
+# [113] yaml_2.3.5                                          prabclus_2.3-2                                     
+# [115] htmltools_0.5.2                                     memoise_2.0.1                                      
+# [117] VariantAnnotation_1.40.0                            BiocIO_1.4.0                                       
+# [119] locfit_1.5-9.4                                      quadprog_1.5-8                                     
+# [121] digest_0.6.29                                       assertthat_0.2.1                                   
+# [123] mime_0.12                                           rappdirs_0.3.3                                     
+# [125] RSQLite_2.2.10                                      future.apply_1.8.1                                 
+# [127] data.table_1.14.2                                   blob_1.2.2                                         
+# [129] R.oo_1.24.0                                         preprocessCore_1.56.0                              
+# [131] splines_4.1.2                                       Formula_1.2-4                                      
+# [133] labeling_0.4.2                                      Rhdf5lib_1.16.0                                    
+# [135] illuminaio_0.36.0                                   ProtGenerics_1.26.0                                
+# [137] RCurl_1.98-1.6                                      hms_1.1.1                                          
+# [139] modelr_0.1.8                                        rhdf5_2.38.0                                       
+# [141] colorspace_2.0-3                                    base64enc_0.1-3                                    
+# [143] BiocManager_1.30.16                                 mnormt_2.0.2                                       
+# [145] tmvnsim_1.0-2                                       libcoin_1.0-9                                      
+# [147] nnet_7.3-17                                         GEOquery_2.62.2                                    
+# [149] Rcpp_1.0.8                                          coin_1.4-2                                         
+# [151] fansi_1.0.2                                         tzdb_0.2.0                                         
+# [153] parallelly_1.30.0                                   ModelMetrics_1.2.2.2                               
+# [155] R6_2.5.1                                            lifecycle_1.0.1                                    
+# [157] curl_4.3.2                                          robustbase_0.93-9                                  
+# [159] Matrix_1.4-0                                        TH.data_1.1-0                                      
+# [161] org.Hs.eg.db_3.14.0                                 RColorBrewer_1.1-2                                 
+# [163] iterators_1.0.14                                    gower_1.0.0                                        
+# [165] htmlwidgets_1.5.4                                   biomaRt_2.50.3                                     
+# [167] missMethyl_1.28.0                                   rvest_1.0.2                                        
+# [169] globals_0.14.0                                      openssl_2.0.0                                      
+# [171] htmlTable_2.4.0                                     codetools_0.2-18                                   
+# [173] IlluminaHumanMethylation450kanno.ilmn12.hg19_0.6.0  lubridate_1.8.0                                    
+# [175] gtools_3.9.2                                        prettyunits_1.1.1                                  
+# [177] R.methodsS3_1.8.1                                   gtable_0.3.0                                       
+# [179] DBI_1.1.2                                           httr_1.4.2                                         
+# [181] stringi_1.7.6                                       progress_1.2.2                                     
+# [183] reshape2_1.4.4                                      farver_2.1.0                                       
+# [185] diptest_0.76-0                                      annotate_1.72.0                                    
+# [187] timeDate_3043.102                                   xml2_1.3.3                                         
+# [189] restfulr_0.0.13                                     BiocVersion_3.14.0                                 
+# [191] DEoptimR_1.0-10                                     bit_4.0.4                                          
+# [193] jpeg_0.1-9                                          pkgconfig_2.0.3                                    
+# [195] knitr_1.37     
