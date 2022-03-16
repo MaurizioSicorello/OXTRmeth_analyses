@@ -26,9 +26,9 @@ renv::restore() to restore our package versions. Packages should be installed au
 Similarly, paths will be set in a cross-platform compatible manner, relative to the R-project file,
 using the package "here". Results were last checked with the following session info: 
 
-R version 4.1.2 (2021-11-01)
-Platform: x86_64-w64-mingw32/x64 (64-bit)
-Running under: Windows 10 x64 (build 22000)
+R version 4.1.2 (2021-11-01) <br/>
+Platform: x86_64-w64-mingw32/x64 (64-bit) <br/>
+Running under: Windows 10 x64 (build 22000) <br/>
 
 The script "singleCpgs_and_DMRs.R" can be used to check the CpG-wise analyses.
 
