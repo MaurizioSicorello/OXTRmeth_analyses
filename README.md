@@ -1,14 +1,14 @@
 # OXTRmeth_analyses
-Open code for the paper entitled: 
+Open code for the paper entitled:
 "The DNA methylation landscape of the human oxytocin receptor gene (OXTR): Recommendations for future research"
-by M.Sc. Svenja Müller, M. Sc. Maurizio Sicorello, Dr. Dirk Moser, M. Sc. Leonard Frach, 
-B. Sc. Alicia Limberg, Dr. Anja M. Gumpp, Dr. Laura Ramo-Fernandez, Prof. Dr. Robert Kumsta, 
-Prof. Dr. Iris -Tatjana Kolassa
+by M.Sc. Svenja Müller, M. Sc. Maurizio Sicorello, Dr. Dirk Moser, M. Sc. Leonard Frach,
+B. Sc. Alicia Limberg, Dr. Anja M. Gumpp, Dr. Laura Ramo-Fernandez, Prof. Dr. Robert Kumsta,
+Prof. Dr. Iris-Tatjana Kolassa
 
 Permission for openly sharing the data was not granted. Please contact the authors for access requests.
 
 Folders:
--Figures (output figures of analyses)
+-Figures (output figures of analyses) <br/>
 -Functions (helper functions called from the analysis scripts)
 -OXTR-shinyapp (shiny web application, available under: https://msicorello.shinyapps.io/oxtr-shinyapp/)
 -renv (snapshot of the R package environment to facilitate reproducibility. See details below)
@@ -24,7 +24,7 @@ Folders:
 Most analyses can be performed by opening the R-Project file "OXTRmeth_analyses" and then opening OXTRstructure.R.
 Before running this script, make sure the package renv is installed using install.packages("renv"). Then, use
 renv::restore() to restore our package versions. Packages should be installed automatically when you run the code.
-Similarly, paths will be set in a cross-platform compatible manner, relative to the R-project file, 
+Similarly, paths will be set in a cross-platform compatible manner, relative to the R-project file,
 using the package "here". Results were last checked with the following session info:
 
 R version 4.1.2 (2021-11-01)
