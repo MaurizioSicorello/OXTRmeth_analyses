@@ -1,9 +1,9 @@
 # The DNA methylation landscape of the human oxytocin receptor gene (OXTR): Recommendations for future research
-## Open Code and Results
 by M.Sc. Svenja Müller, M. Sc. Maurizio Sicorello, Dr. Dirk Moser, M. Sc. Leonard Frach,
 B. Sc. Alicia Limberg, Dr. Anja M. Gumpp, Dr. Laura Ramo-Fernandez, Prof. Dr. Robert Kumsta,
 Prof. Dr. Iris-Tatjana Kolassa
 
+## Open Code
 Permission for openly sharing the data was not granted. Please contact the authors for access requests.
 
 Folders: <br/>
