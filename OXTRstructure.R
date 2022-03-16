@@ -1,4 +1,4 @@
-
+renv::init()
 
 #################################
 # Load and prepare packages/data
@@ -17,7 +17,8 @@ df = read.csv(here("Data", "RUB_OXTR_Daten_26.4.csv"), header = T, sep = ";")
 df_CpG_m = df[,grepl("CpG_m", names(df))]
 df_CpG_m = as.data.frame(apply(df_CpG_m,2, function(x){as.numeric(sub("%", "", x, fixed=TRUE))/100}))
 df_outcomes = df[complete.cases(df_CpG_m), c("ctq_sum", "Genexp_OXTR_mother", "ctq_dich01_multi01")]
-df_CpG_m = df_CpG_m[complete.cases(df_CpG_m),]
+completeCaseInd = complete.cases(df_CpG_m)
+df_CpG_m = df_CpG_m[completeCaseInd,]
 
 # load identifier of gene sections
 dfcodes = read.csv(here("Data", "OXTR_segmentCodes.csv"), header = T, sep = ";")
@@ -123,6 +124,7 @@ ggplot(data = df_clustMem_long, aes(x = reorder(dfcodes.CpG, rep((1:nrow(df_clus
 ggsave(here("Figures", "DBSCAN_clustMembership.pdf"), device = "pdf")
 ggsave(here("Figures", "DBSCAN_clustMembership.png"), device = "png")
 
+
 #################
 # hierarchical clustering (hclust)
 
@@ -188,8 +190,6 @@ shiny_clusterAssign <- df_hclustAssign_mothers
 
 #################################
 # supervised data-driven description of OXTR
-
-
 
 # # mean sensitivity from Moser et al. (2020), Table S7, rightmost column
 # meanSens = mean(c(0.67, 1.37, 1.39, 1.51, 1.24, 2.28))/100
@@ -626,16 +626,6 @@ df_CpG_k_z = scale(df_CpG_k)
 
 
 #################
-# factor analysis
-KMO(df_CpG_k_z)
-fa.parallel(df_CpG_k_z, fa="pc")
-pca_all = principal(df_CpG_k, nfactors=7, rotate="oblimin")
-pca_all # factor intercorrelations neglegible
-pca_all = principal(df_CpG_k, nfactors=7, rotate="varimax")
-pca_all$loadings
-
-
-#################
 # cluster analysis (dbscan)
 
 # transpose data
@@ -801,7 +791,7 @@ ggsave(here("Figures", "ampliconCorrs.png"), device = "png")
 
 
 #################
-# prepare variables for online table
+# prepare variables for shinyapp table
 
 
 ##########
@@ -809,12 +799,13 @@ ggsave(here("Figures", "ampliconCorrs.png"), device = "png")
 
 df_BFout <- as.data.frame(matrix(nrow = nrow(dfcodes), ncol = 4, dimnames = list(NULL, c("CpGs", "BFgenExpr", "BFCTQ", "BFtrauma"))))
 
+# new code
 for(i in 1:nrow(dfcodes)){
   
-  BF_geneExpr = extractBF(correlationBF(PLSnested_Genexpr$dat[,1], PLSnested_Genexpr$dat[,i+1]))$bf
-  BF_CTQ = extractBF(correlationBF(PLSnested_CTQ$dat[,1], PLSnested_CTQ$dat[,i+1]))$bf
-  BF_trauma = extractBF(ttestBF(PLSnested_CTQcat$dat[PLSnested_CTQcat$dat$DV == levels(PLSnested_CTQcat$dat$DV)[1], i+1], 
-                                PLSnested_CTQcat$dat[PLSnested_CTQcat$dat$DV == levels(PLSnested_CTQcat$dat$DV)[2], i+1]))$bf
+  BF_geneExpr = extractBF(correlationBF(df$Genexp_OXTR_mother[completeCaseInd], df_CpG_m[, i]))$bf
+  BF_CTQ = extractBF(correlationBF(df$ctq_sum[completeCaseInd], df_CpG_m[, i]))$bf
+  BF_trauma = extractBF(ttestBF(df_CpG_m[df$ctq_dich01_multi01[completeCaseInd] == 1, i],
+                                df_CpG_m[df$ctq_dich01_multi01[completeCaseInd] == 0, i]))$bf
   
   df_BFout[i, ] <- c(dfcodes[i,1], BF_geneExpr, BF_CTQ, BF_trauma)
   
@@ -822,13 +813,8 @@ for(i in 1:nrow(dfcodes)){
 
 shiny_BF <- df_BFout
 
-
-shiny_nOutliers
-shiny_clusterAssign
-shiny_empSD
-shiny_pInsuffVar
-shiny_sensitivity
-shiny_BF
+##########
+# shinyapp table
 
 shinyTable <- data.frame(shiny_nOutliers, shiny_clusterAssign$hclustRec, shiny_empSD, shiny_pInsuffVar, shiny_sensitivity, shiny_BF[, 2:4])
 
@@ -841,8 +827,8 @@ names(shinyTable)[1] <- "CpG_Nr"
 shinyTable_out <- dplyr::left_join(shinyTable, glossar)
 shinyTable_out$position <- stringr::str_split_fixed(shinyTable_out$Chromosomal_Location, ":", 2)[, 2]
 
-require(openxlsx)
-write.xlsx(shinyTable_out, file = "Results/shinyPrepareOXTRstructure.xlsx", colNames = T, rowNames = T)
+# require(openxlsx)
+# write.xlsx(shinyTable_out, file = "Results/shinyPrepareOXTRstructure.xlsx", colNames = T, rowNames = T)
 
 
 
