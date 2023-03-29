@@ -595,6 +595,18 @@ results.lm.ctq <- results.lm.ctq[, c(1, 6:7, 2:5)]
 
 summary(results.lm.ctq$Estimate)
 
+names <- rownames(results.lm.ctq)[1:10]
+
+par(mfrow = c(5, 4))
+for (i in 1:5) {
+ plot(lm(scale(df_CpG_m[names[i]]) ~ scale(df_outcomes$ctq)))
+}
+
+par(mfrow = c(5, 4))
+for (i in 6:10) {
+  plot(lm(scale(df_CpG_m[names[i]]) ~ scale(df_outcomes$ctq)))
+}
+
 
 # linear models predicting gene expression
 
@@ -612,6 +624,19 @@ results.lm$CI_upper <- with(results.lm, Estimate + 1.96 * SE)
 
 
 results.lm <- results.lm[, c(1, 6:7, 2:5)]
+
+
+names <- rownames(results.lm)[1:10]
+
+par(mfrow = c(5, 4))
+for (i in 1:5) {
+  plot(lm(scale(df_outcomes$genExpr) ~ scale(df_CpG_m[names[i]])))
+}
+
+par(mfrow = c(5, 4))
+for (i in 6:10) {
+  plot(lm(scale(df_outcomes$genExpr) ~ scale(df_CpG_m[names[i]])))
+}
 
 ##############################
 
