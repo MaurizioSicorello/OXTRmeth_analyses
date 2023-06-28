@@ -372,10 +372,9 @@ myAnnotation_geneExpr <- sequencing.annotate(bseq_obj, methdesign = methdesign, 
 str(myAnnotation_geneExpr)
 
 # look for DMRs within 500bp
-DMRs_geneExpr <- dmrcate(myAnnotation_geneExpr, lambda = 500) # no individual CpG that are significant, so DMRcate does not work
+# DMRs_geneExpr <- dmrcate(myAnnotation_geneExpr, lambda = 500) # no individual CpG that are significant, so DMRcate does not work
 
 # only significant CpGs at FDR 0.30 (NOT RELIABLE AT ALL, RESULTS ARE NOT MEANINGFUL!!)
-
 DMRs_geneExprFDR30 <- dmrcate(changeFDR(myAnnotation_geneExpr,FDR = 0.3), lambda = 500)
 
 (results.ranges_geneExprFDR30 <- extractRanges(DMRs_geneExprFDR30)) # including 17 CpGs, but again - NOT MEANINGFUL 
@@ -596,6 +595,18 @@ results.lm.ctq <- results.lm.ctq[, c(1, 6:7, 2:5)]
 
 summary(results.lm.ctq$Estimate)
 
+names <- rownames(results.lm.ctq)[1:10]
+
+par(mfrow = c(5, 4))
+for (i in 1:5) {
+ plot(lm(scale(df_CpG_m[names[i]]) ~ scale(df_outcomes$ctq)))
+}
+
+par(mfrow = c(5, 4))
+for (i in 6:10) {
+  plot(lm(scale(df_CpG_m[names[i]]) ~ scale(df_outcomes$ctq)))
+}
+
 
 # linear models predicting gene expression
 
@@ -613,6 +624,19 @@ results.lm$CI_upper <- with(results.lm, Estimate + 1.96 * SE)
 
 
 results.lm <- results.lm[, c(1, 6:7, 2:5)]
+
+
+names <- rownames(results.lm)[1:10]
+
+par(mfrow = c(5, 4))
+for (i in 1:5) {
+  plot(lm(scale(df_outcomes$genExpr) ~ scale(df_CpG_m[names[i]])))
+}
+
+par(mfrow = c(5, 4))
+for (i in 6:10) {
+  plot(lm(scale(df_outcomes$genExpr) ~ scale(df_CpG_m[names[i]])))
+}
 
 ##############################
 
@@ -707,17 +731,21 @@ oxtrPlot$CpG <- factor(oxtrPlot$CpG, labels = 1:length(oxtrPlot$CpG))
 library(tidyverse)
 oxtrPlot2 <- oxtrPlot %>% gather("Association_with", "Pvalue", c(log10_P_Group, log10_P_GeneExpr))
 
-oxtrPlot2$Association_with <- dplyr::recode(oxtrPlot2$Association_with,
-                                            "log10_P_Group" = "Group", 
-                                            "log10_P_GeneExpr" = "mRNA_expr") 
 ####
 
-df_plot <- oxtrPlot2[!(pos %in% dmr_pos_name), c("pos", "Pvalue", "segment2", "Association_with")]
-df_plot2 <-  oxtrPlot2[pos %in% dmr_pos_name, c("pos", "Pvalue", "segment2", "Association_with")]
+oxtrPlot2$Association_with[pos %in% dmr_pos_name] <- "DMR"
+
+oxtrPlot2$Association_with <- dplyr::recode(oxtrPlot2$Association_with,
+                                            "log10_P_Group" = "Group (single CpGs)",
+                                            "log10_P_GeneExpr" = "mRNA_expr (single CpGs)",
+                                            "DMR" = "Group (DMR)")
+oxtrPlot2$Association_with <- factor(oxtrPlot2$Association_with ,
+                                     levels = c("Group (single CpGs)", "mRNA_expr (single CpGs)", "Group (DMR)"))
+
 
 png(filename = "Figures/FigureS12.png", width = 6000, height = 4500, type = "cairo", res = 900)
 ggplot() + 
-  geom_point(data = df_plot, 
+  geom_point(data = oxtrPlot2, 
              aes(pos, 
                  Pvalue, 
                  colour = factor(segment2, levels = unique(segment2)),
@@ -726,17 +754,13 @@ ggplot() +
                                      Association_with)
              )
   ) +
-  geom_point(data = df_plot2, 
-             aes(pos, Pvalue, 
-                 colour = factor(segment2, levels = unique(segment2))),
-             shape = 15) +
   geom_hline(yintercept = (-log10(0.05)), linetype = 2) + # nominal p < 0.05
   geom_hline(yintercept = (-log10(0.001)), linetype = 1) +
   ylim(0, 5) + labs(x = "OXTR CpG Site", y = "-log10 P-Value") + 
   theme_classic() +
   theme(legend.position = "right") +
   labs(colour = '', shape = '') +
-  scale_x_discrete(limits = rev, labels = NULL) +
+  scale_x_discrete(labels = NULL) +
   scale_color_brewer(palette = "Spectral")
 dev.off()
 
@@ -778,17 +802,19 @@ oxtrPlot$CpG <- factor(oxtrPlot$CpG, labels = 1:length(oxtrPlot$CpG))
 library(tidyverse)
 oxtrPlot2 <- oxtrPlot %>% gather("Association_with", "Pvalue", c(log10_P_CTQ, log10_P_GeneExpr))
 
+oxtrPlot2$Association_with[pos %in% dmr_pos_name] <- "DMR"
+
 oxtrPlot2$Association_with <- dplyr::recode(oxtrPlot2$Association_with,
-                                            "log10_P_CTQ" = "CTQ", 
-                                            "log10_P_GeneExpr" = "mRNA_expr") 
+                                            "log10_P_CTQ" = "CTQ (single CpGs)",
+                                            "log10_P_GeneExpr" = "mRNA_expr (single CpGs)",
+                                            "DMR" = "CTQ (DMR)")
+oxtrPlot2$Association_with <- factor(oxtrPlot2$Association_with ,
+                                     levels = c("CTQ (single CpGs)", "mRNA_expr (single CpGs)", "CTQ (DMR)"))
 
-
-df_plot <- oxtrPlot2[!(pos %in% dmr_pos_name), c("pos", "Pvalue", "segment2", "Association_with")]
-df_plot2 <-  oxtrPlot2[pos %in% dmr_pos_name, c("pos", "Pvalue", "segment2", "Association_with")]
 
 png(filename = "Figures/Figure5.png", width = 6000, height = 4500, type = "cairo", res = 900)
 ggplot() + 
-  geom_point(data = df_plot, 
+  geom_point(data = oxtrPlot2, 
              aes(pos, 
                  Pvalue, 
                  colour = factor(segment2, levels = unique(segment2)),
@@ -797,17 +823,13 @@ ggplot() +
                                      Association_with)
              )
   ) +
-  geom_point(data = df_plot2, 
-             aes(pos, Pvalue, 
-                 colour = factor(segment2, levels = unique(segment2))),
-             shape = 15) +
   geom_hline(yintercept = (-log10(0.05)), linetype = 2) + # nominal p < 0.05
   geom_hline(yintercept = (-log10(0.001)), linetype = 1) +
   ylim(0, 7) + labs(x = "OXTR CpG Site", y = "-log10 P-Value") + 
   theme_classic() +
   theme(legend.position = "right") +
   labs(colour = '', shape = '') +
-  scale_x_discrete(limits = rev, labels = NULL) +
+  scale_x_discrete(labels = NULL) +
   scale_color_brewer(palette = "Spectral")
 dev.off()
 
