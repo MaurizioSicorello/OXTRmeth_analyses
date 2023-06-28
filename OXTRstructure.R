@@ -1,4 +1,4 @@
-renv::init()
+
 
 #################################
 # Load and prepare packages/data
@@ -377,7 +377,7 @@ ggplot(data = dfplot_CTQ_cors, aes(x = reorder(dfcodes.CpG, rep((1:nrow(dfplot_C
 # childhood trauma [categorical]
 
 # do nested k-fold PLS
-PLSnested_CTQcat = PLSnestedCV(df_outcomes$ctq_dich01_multi01, df_CpG_m, nrepeats = repeats, nfolds = folds, maxComps = maxcomp, setSeed = 1000, classification = T)
+PLSnested_CTQcat = PLSnestedCV(df_outcomes$ctq_dich01_multi01, df_CpG_m, nrepeats = 1, nfolds = folds, maxComps = maxcomp, setSeed = 1000, classification = TRUE)
 PLSnested_CTQcat[[1]]
 
 outcome = df_outcomes$ctq_dich01_multi01
