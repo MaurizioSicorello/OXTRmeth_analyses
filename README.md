@@ -1,7 +1,8 @@
-# The DNA methylation landscape of the human oxytocin receptor gene (OXTR): Recommendations for future research
-by M.Sc. Svenja Müller, M. Sc. Maurizio Sicorello, Dr. Dirk Moser, M. Sc. Leonard Frach,
-B. Sc. Alicia Limberg, Dr. Anja M. Gumpp, Dr. Laura Ramo-Fernandez, Prof. Dr. Robert Kumsta,
-Prof. Dr. Iris-Tatjana Kolassa
+# The DNA methylation landscape of the human oxytocin receptor gene (OXTR): data-driven clusters and their relation to gene expression and childhood adversity
+by Dr. Svenja Müller, M. Sc. Maurizio Sicorello, Dr. Dirk Moser, M. Sc. Leonard Frach,
+B. Sc. Alicia Limberg, Dr. Anja M. Gumpp, Dr. Laura Ramo-Fernandez, Dr. Franziska Köhler-Dauner, Prof. Dr. Jörg M. Fegert, Prof. Dr. Christiane Waller, Prof. Dr. Robert Kumsta, Prof. Dr. Iris-Tatjana Kolassa
+
+https://doi.org/10.1038/s41398-023-02548-6
 
 ## Open Code
 Permission for openly sharing the data was not granted. Please contact the authors for access requests.
